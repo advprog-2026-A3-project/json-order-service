@@ -22,8 +22,13 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
+      # PERBAIKAN 1: Nama action gradle yang benar
       - name: Cache Gradle packages
-        uses: actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v3
+
+      # PERBAIKAN 2: Berikan izin eksekusi untuk gradlew
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
 
       # Jalankan Testing & Jacoco untuk Coverage
       - name: Run Tests & Jacoco Report
