@@ -1,7 +1,7 @@
 package id.ac.ui.cs.advprog.order.controller;
 
 import id.ac.ui.cs.advprog.order.model.Order;
-import id.ac.ui.cs.advprog.order.repository.OrderRepository;
+import id.ac.ui.cs.advprog.order.service.OrderService; // Import Service
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -15,14 +15,14 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@WebMvcTest(OrderController.class)
+@WebMvcTest(OrderController.class) // Hanya fokus test Layer Controller
 class OrderControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
 
     @MockBean
-    private OrderRepository orderRepository;
+    private OrderService orderService; // Mock Service, bukan Repository
 
     @Test
     void testCreateOrderPage() throws Exception {
@@ -43,7 +43,8 @@ class OrderControllerTest {
 
     @Test
     void testListOrders() throws Exception {
-        when(orderRepository.findAll()).thenReturn(new ArrayList<Order>());
+        // Mock perilaku Service
+        when(orderService.findAllOrders()).thenReturn(new ArrayList<Order>());
 
         mockMvc.perform(get("/order/list"))
                 .andExpect(status().isOk())
