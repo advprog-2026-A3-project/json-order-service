@@ -36,6 +36,9 @@ dependencies {
     runtimeOnly("com.h2database:h2") // Database in-memory untuk test & run lokal TA
     runtimeOnly("org.postgresql:postgresql") // Persiapan untuk Production / Staging
 
+    // --- Validation ---
+    implementation("org.springframework.boot:spring-boot-starter-validation") // Jakarta Validation support
+
     // --- Utils ---
     compileOnly("org.projectlombok:lombok")
     developmentOnly("org.springframework.boot:spring-boot-devtools")
