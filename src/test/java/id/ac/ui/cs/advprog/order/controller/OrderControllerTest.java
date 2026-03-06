@@ -21,6 +21,7 @@ class OrderControllerTest {
     @Autowired
     private MockMvc mockMvc;
 
+    @SuppressWarnings("deprecation")
     @MockBean
     private OrderService orderService; // Mock Service, bukan Repository
 
