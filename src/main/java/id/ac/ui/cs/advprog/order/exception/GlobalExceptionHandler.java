@@ -120,6 +120,17 @@ public class GlobalExceptionHandler {
                 ));
     }
 
+    @ExceptionHandler(DuplicateRatingException.class)
+    public ResponseEntity<ErrorResponse> handleDuplicateRating(DuplicateRatingException ex) {
+        log.warn("Duplicate rating: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ErrorResponse(
+                        HttpStatus.CONFLICT.value(),
+                        ex.getMessage(),
+                        LocalDateTime.now()
+                ));
+    }
+
     @Getter
     @Setter
     @AllArgsConstructor
@@ -139,4 +150,3 @@ public class GlobalExceptionHandler {
         private Map<String, String> errors;
     }
 }
-

@@ -6,19 +6,25 @@ import id.ac.ui.cs.advprog.order.dto.RatingRequest;
 import id.ac.ui.cs.advprog.order.dto.RatingResponse;
 import id.ac.ui.cs.advprog.order.exception.CannotCancelOrderException;
 import id.ac.ui.cs.advprog.order.exception.CannotRateOrderException;
+import id.ac.ui.cs.advprog.order.exception.DuplicateRatingException;
 import id.ac.ui.cs.advprog.order.exception.InvalidStatusTransitionException;
 import id.ac.ui.cs.advprog.order.exception.JastipperCannotBuySelfException;
+import id.ac.ui.cs.advprog.order.exception.OrderException;
 import id.ac.ui.cs.advprog.order.exception.OrderNotFoundException;
 import id.ac.ui.cs.advprog.order.model.Order;
 import id.ac.ui.cs.advprog.order.model.OrderStatus;
 import id.ac.ui.cs.advprog.order.model.Rating;
+import id.ac.ui.cs.advprog.order.port.InventoryPort;
+import id.ac.ui.cs.advprog.order.port.ProfilePort;
+import id.ac.ui.cs.advprog.order.port.WalletPort;
 import id.ac.ui.cs.advprog.order.repository.OrderRepository;
 import id.ac.ui.cs.advprog.order.repository.RatingRepository;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -30,21 +36,15 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class OrderServiceImpl implements OrderService {
 
-    @Autowired
-    private OrderRepository orderRepository;
-
-    @Autowired
-    private RatingRepository ratingRepository;
-
-    // TODO: Integrate with external services (Wallet, Inventory, Profile)
-    // @Autowired
-    // private WalletClient walletClient;
-    // @Autowired
-    // private InventoryClient inventoryClient;
-    // @Autowired
-    // private ProfileClient profileClient;
+    private final OrderRepository orderRepository;
+    private final RatingRepository ratingRepository;
+    private final InventoryPort inventoryPort;
+    private final WalletPort walletPort;
+    private final ProfilePort profilePort;
+    private final OrderStatusTransitionPolicy statusTransitionPolicy;
 
     /**
      * Create a new order through checkout process.
@@ -53,30 +53,51 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional
     public Order checkoutOrder(OrderCheckoutRequest request) {
-        log.info("Processing checkout for Titiper: {} Product: {}", request.getTitiperUserId(), request.getProductId());
+        log.info("Processing checkout for titiper={}, productId={}", request.getTitiperUserId(), request.getProductId());
 
-        // TODO: Get product details from Inventory Module
-        // TODO: Get user details from Profile Module for verification
+        if (request.getJastiperUserId() != null
+                && profilePort.isSelfPurchase(request.getTitiperUserId(), request.getJastiperUserId())) {
+            throw new JastipperCannotBuySelfException(request.getTitiperUserId());
+        }
 
-        // Constraint: Jastiper cannot buy their own product
-        // TODO: Verify jastiper != titiper using Profile Module
+        if (!inventoryPort.hasSufficientStock(request.getProductId(), request.getQuantity())) {
+            throw new OrderException("Insufficient stock for productId: " + request.getProductId());
+        }
 
-        Order order = Order.builder()
-                .productId(request.getProductId())
-                .titiperUserId(request.getTitiperUserId())
-                .quantity(request.getQuantity())
-                .shippingAddress(request.getShippingAddress())
-                // TODO: Get totalPrice from Inventory Module based on productId
-                .status(OrderStatus.PENDING)
-                .build();
+        OrderStatus initialStatus = OrderStatus.PENDING;
+        BigDecimal totalPrice = request.getTotalPrice();
+        if (totalPrice != null && totalPrice.signum() > 0) {
+            if (!walletPort.hasSufficientBalance(request.getTitiperUserId(), totalPrice)) {
+                throw new OrderException("Insufficient wallet balance for userId: " + request.getTitiperUserId());
+            }
+            initialStatus = OrderStatus.PAID;
+        }
 
-        // TODO: Verify stock availability from Inventory Module
-        // TODO: Verify wallet balance from Wallet Module
+        inventoryPort.reserveStock(request.getProductId(), request.getQuantity());
 
-        Order savedOrder = orderRepository.save(order);
-        log.info("Order created with ID: {} Status: {}", savedOrder.getId(), savedOrder.getStatus());
+        try {
+            if (initialStatus == OrderStatus.PAID) {
+                walletPort.deductBalance(request.getTitiperUserId(), totalPrice);
+            }
 
-        return savedOrder;
+            Order order = Order.builder()
+                    .productId(request.getProductId())
+                    .productName(request.getProductName())
+                    .titiperUserId(request.getTitiperUserId())
+                    .jastiperUserId(request.getJastiperUserId())
+                    .quantity(request.getQuantity())
+                    .shippingAddress(request.getShippingAddress())
+                    .totalPrice(totalPrice)
+                    .status(initialStatus)
+                    .build();
+
+            Order savedOrder = orderRepository.save(order);
+            log.info("Order created with id={} status={}", savedOrder.getId(), savedOrder.getStatus());
+            return savedOrder;
+        } catch (RuntimeException ex) {
+            inventoryPort.releaseReservedStock(request.getProductId(), request.getQuantity());
+            throw ex;
+        }
     }
 
     @Override
@@ -88,14 +109,12 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional(readOnly = true)
     public List<Order> getOrdersByTitiper(String titiperUserId) {
-        log.info("Fetching orders for Titiper: {}", titiperUserId);
         return orderRepository.findByTitiperUserId(titiperUserId);
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<Order> getOrdersByJastiper(String jastiperUserId) {
-        log.info("Fetching orders for Jastiper: {}", jastiperUserId);
         return orderRepository.findByJastiperUserId(jastiperUserId);
     }
 
@@ -124,23 +143,16 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional
     public Order updateOrderStatus(Long orderId, OrderStatus newStatus) {
-        log.info("Updating order {} status to: {}", orderId, newStatus);
-
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new OrderNotFoundException(orderId));
 
         OrderStatus currentStatus = order.getStatus();
-
-        // Validate status transition
         if (!canTransitionStatus(currentStatus, newStatus)) {
             throw new InvalidStatusTransitionException(currentStatus.toString(), newStatus.toString());
         }
 
         order.setStatus(newStatus);
-        Order updatedOrder = orderRepository.save(order);
-
-        log.info("Order {} status updated from {} to {}", orderId, currentStatus, newStatus);
-        return updatedOrder;
+        return orderRepository.save(order);
     }
 
     /**
@@ -154,18 +166,7 @@ public class OrderServiceImpl implements OrderService {
      */
     @Override
     public boolean canTransitionStatus(OrderStatus fromStatus, OrderStatus toStatus) {
-        if (fromStatus == toStatus) {
-            return true; // No change needed
-        }
-
-        return switch (fromStatus) {
-            case PENDING -> toStatus == OrderStatus.PAID || toStatus == OrderStatus.CANCELLED;
-            case PAID -> toStatus == OrderStatus.PURCHASED || toStatus == OrderStatus.CANCELLED;
-            case PURCHASED -> toStatus == OrderStatus.SHIPPED || toStatus == OrderStatus.CANCELLED;
-            case SHIPPED -> toStatus == OrderStatus.COMPLETED || toStatus == OrderStatus.CANCELLED;
-            case COMPLETED -> false; // Cannot transition from completed
-            case CANCELLED -> false; // Cannot transition from cancelled
-        };
+        return statusTransitionPolicy.canTransition(fromStatus, toStatus);
     }
 
     /**
@@ -175,15 +176,11 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional
     public Order cancelOrder(Long orderId, CancelOrderRequest request) {
-        log.info("Attempting to cancel order: {}", orderId);
-
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new OrderNotFoundException(orderId));
 
         OrderStatus currentStatus = order.getStatus();
-
-        // Cannot cancel orders that have already been shipped or completed
-        if (currentStatus == OrderStatus.SHIPPED || currentStatus == OrderStatus.COMPLETED) {
+        if (currentStatus == OrderStatus.SHIPPED || currentStatus == OrderStatus.COMPLETED || currentStatus == OrderStatus.CANCELLED) {
             throw new CannotCancelOrderException(orderId, currentStatus.toString());
         }
 
@@ -193,10 +190,12 @@ public class OrderServiceImpl implements OrderService {
 
         Order cancelledOrder = orderRepository.save(order);
 
-        // TODO: Call Wallet Module to trigger refund
-        // walletClient.refund(order.getTitiperUserId(), order.getTotalPrice());
+        inventoryPort.releaseReservedStock(order.getProductId(), order.getQuantity());
+        if (order.getTotalPrice() != null && order.getTotalPrice().signum() > 0
+                && (currentStatus == OrderStatus.PAID || currentStatus == OrderStatus.PURCHASED)) {
+            walletPort.refundBalance(order.getTitiperUserId(), order.getTotalPrice());
+        }
 
-        log.info("Order {} cancelled. Refund triggered for Titiper: {}", orderId, order.getTitiperUserId());
         return cancelledOrder;
     }
 
@@ -206,8 +205,6 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional
     public RatingResponse submitRating(Long orderId, RatingRequest request) {
-        log.info("Submitting rating for order: {}", orderId);
-
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new OrderNotFoundException(orderId));
 
@@ -216,19 +213,20 @@ public class OrderServiceImpl implements OrderService {
             throw new CannotRateOrderException(orderId, order.getStatus().toString());
         }
 
+        if (!ratingRepository.findByOrderId(orderId).isEmpty()) {
+            throw new DuplicateRatingException(orderId);
+        }
+
         Rating rating = Rating.builder()
                 .orderId(orderId)
-                .jastiperUserId(request.getJastiperUserId())
-                .productId(request.getProductId())
+                .jastiperUserId(resolveJastiperId(request, order))
+                .productId(resolveProductId(request, order))
                 .ratingValue(request.getRatingValue())
                 .review(request.getReview())
                 .ratedByTitiper(true)
                 .build();
 
-        Rating savedRating = ratingRepository.save(rating);
-        log.info("Rating submitted successfully for order: {}", orderId);
-
-        return convertToResponse(savedRating);
+        return convertToResponse(ratingRepository.save(rating));
     }
 
     @Override
@@ -284,19 +282,84 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional
     public Order updateStatus(Long id, String status) {
-        Order order = orderRepository.findById(id)
-                .orElseThrow(() -> new OrderNotFoundException(id));
         try {
-            OrderStatus newStatus = OrderStatus.valueOf(status.toUpperCase());
-            return updateOrderStatus(id, newStatus);
+            return updateOrderStatus(id, OrderStatus.valueOf(status.toUpperCase()));
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException("Invalid order status: " + status);
         }
     }
 
     /**
-     * Convert Rating entity to RatingResponse DTO
+     * Delete an order (only PENDING orders can be deleted)
      */
+    @Override
+    @Transactional
+    public void deleteOrder(Long orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new OrderNotFoundException(orderId));
+
+        if (order.getStatus() != OrderStatus.PENDING) {
+            throw new IllegalStateException(
+                    "Cannot delete order. Only PENDING orders can be deleted. Current status: " + order.getStatus()
+            );
+        }
+
+        orderRepository.deleteById(orderId);
+    }
+
+    /**
+     * Update order details (only allowed for PENDING or PAID orders)
+     */
+    @Override
+    @Transactional
+    public Order updateOrder(Long orderId, Order updateRequest) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new OrderNotFoundException(orderId));
+
+        // Only allow updates for PENDING or PAID orders
+        if (order.getStatus() != OrderStatus.PENDING && order.getStatus() != OrderStatus.PAID) {
+            throw new IllegalStateException(
+                    "Cannot update order. Only PENDING or PAID orders can be updated. Current status: " + order.getStatus()
+            );
+        }
+
+        if (updateRequest.getProductName() != null && !updateRequest.getProductName().isBlank()) {
+            order.setProductName(updateRequest.getProductName());
+        }
+        if (updateRequest.getQuantity() != null && updateRequest.getQuantity() > 0) {
+            order.setQuantity(updateRequest.getQuantity());
+        }
+        if (updateRequest.getShippingAddress() != null && !updateRequest.getShippingAddress().isBlank()) {
+            order.setShippingAddress(updateRequest.getShippingAddress());
+        }
+        if (updateRequest.getStatus() != null) {
+            if (!canTransitionStatus(order.getStatus(), updateRequest.getStatus())) {
+                throw new InvalidStatusTransitionException(
+                        order.getStatus().toString(),
+                        updateRequest.getStatus().toString()
+                );
+            }
+            order.setStatus(updateRequest.getStatus());
+        }
+
+        order.setUpdatedAt(LocalDateTime.now());
+        return orderRepository.save(order);
+    }
+
+    private String resolveJastiperId(RatingRequest request, Order order) {
+        if (request.getJastiperUserId() != null && !request.getJastiperUserId().isBlank()) {
+            return request.getJastiperUserId();
+        }
+        return order.getJastiperUserId();
+    }
+
+    private String resolveProductId(RatingRequest request, Order order) {
+        if (request.getProductId() != null && !request.getProductId().isBlank()) {
+            return request.getProductId();
+        }
+        return order.getProductId();
+    }
+
     private RatingResponse convertToResponse(Rating rating) {
         return RatingResponse.builder()
                 .id(rating.getId())
@@ -310,3 +373,4 @@ public class OrderServiceImpl implements OrderService {
                 .build();
     }
 }
+

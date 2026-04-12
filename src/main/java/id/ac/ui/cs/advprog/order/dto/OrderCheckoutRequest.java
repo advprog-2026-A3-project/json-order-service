@@ -1,5 +1,7 @@
 package id.ac.ui.cs.advprog.order.dto;
 
+import java.math.BigDecimal;
+
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -32,5 +34,10 @@ public class OrderCheckoutRequest {
 
     @NotBlank(message = "Titiper user ID is required")
     private String titiperUserId;
-}
 
+    private String jastiperUserId;
+
+    private BigDecimal totalPrice;
+
+    private String productName;
+}

@@ -5,11 +5,15 @@ import id.ac.ui.cs.advprog.order.dto.OrderCheckoutRequest;
 import id.ac.ui.cs.advprog.order.dto.RatingRequest;
 import id.ac.ui.cs.advprog.order.exception.CannotCancelOrderException;
 import id.ac.ui.cs.advprog.order.exception.CannotRateOrderException;
+import id.ac.ui.cs.advprog.order.exception.DuplicateRatingException;
 import id.ac.ui.cs.advprog.order.exception.InvalidStatusTransitionException;
 import id.ac.ui.cs.advprog.order.exception.OrderNotFoundException;
 import id.ac.ui.cs.advprog.order.model.Order;
 import id.ac.ui.cs.advprog.order.model.OrderStatus;
 import id.ac.ui.cs.advprog.order.model.Rating;
+import id.ac.ui.cs.advprog.order.port.InventoryPort;
+import id.ac.ui.cs.advprog.order.port.ProfilePort;
+import id.ac.ui.cs.advprog.order.port.WalletPort;
 import id.ac.ui.cs.advprog.order.repository.OrderRepository;
 import id.ac.ui.cs.advprog.order.repository.RatingRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
@@ -27,7 +32,10 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -43,6 +51,18 @@ class OrderServiceImplTest {
 
     @Mock
     private RatingRepository ratingRepository;
+
+    @Mock
+    private InventoryPort inventoryPort;
+
+    @Mock
+    private WalletPort walletPort;
+
+    @Mock
+    private ProfilePort profilePort;
+
+    @Spy
+    private OrderStatusTransitionPolicy statusTransitionPolicy;
 
     @InjectMocks
     private OrderServiceImpl orderService;
@@ -74,6 +94,10 @@ class OrderServiceImplTest {
                 .shippingAddress("Depok, Indonesia")
                 .titiperUserId("titiper-001")
                 .build();
+
+        lenient().when(inventoryPort.hasSufficientStock(anyString(), anyInt())).thenReturn(true);
+        lenient().when(walletPort.hasSufficientBalance(anyString(), any(BigDecimal.class))).thenReturn(true);
+        lenient().when(profilePort.isSelfPurchase(anyString(), anyString())).thenReturn(false);
     }
 
     // ========== Checkout Tests ==========
@@ -88,7 +112,45 @@ class OrderServiceImplTest {
         assertEquals(testOrder.getProductId(), result.getProductId());
         assertEquals(testOrder.getTitiperUserId(), result.getTitiperUserId());
         assertEquals(OrderStatus.PENDING, result.getStatus());
+        verify(inventoryPort).reserveStock("PROD-001", 2);
+        verify(walletPort, never()).deductBalance(anyString(), any(BigDecimal.class));
         verify(orderRepository).save(any(Order.class));
+    }
+
+    @Test
+    void testCheckoutOrderPaidWhenTotalPriceProvided() {
+        checkoutRequest.setTotalPrice(new BigDecimal("100.00"));
+
+        Order paidOrder = Order.builder()
+                .id(2L)
+                .productId("PROD-001")
+                .titiperUserId("titiper-001")
+                .status(OrderStatus.PAID)
+                .build();
+
+        when(orderRepository.save(any(Order.class))).thenReturn(paidOrder);
+
+        Order result = orderService.checkoutOrder(checkoutRequest);
+
+        assertEquals(OrderStatus.PAID, result.getStatus());
+        verify(walletPort).deductBalance("titiper-001", new BigDecimal("100.00"));
+    }
+
+    @Test
+    void testCheckoutOrderFailsForSelfPurchase() {
+        checkoutRequest.setJastiperUserId("titiper-001");
+        when(profilePort.isSelfPurchase("titiper-001", "titiper-001")).thenReturn(true);
+
+        assertThrows(RuntimeException.class, () -> orderService.checkoutOrder(checkoutRequest));
+        verify(orderRepository, never()).save(any(Order.class));
+    }
+
+    @Test
+    void testCheckoutOrderFailsWhenStockInsufficient() {
+        when(inventoryPort.hasSufficientStock("PROD-001", 2)).thenReturn(false);
+
+        assertThrows(RuntimeException.class, () -> orderService.checkoutOrder(checkoutRequest));
+        verify(orderRepository, never()).save(any(Order.class));
     }
 
     // ========== Order Retrieval Tests ==========
@@ -178,6 +240,7 @@ class OrderServiceImplTest {
         assertTrue(orderService.canTransitionStatus(OrderStatus.PENDING, OrderStatus.CANCELLED));
         assertTrue(orderService.canTransitionStatus(OrderStatus.PAID, OrderStatus.CANCELLED));
         assertTrue(orderService.canTransitionStatus(OrderStatus.PURCHASED, OrderStatus.CANCELLED));
+        assertFalse(orderService.canTransitionStatus(OrderStatus.SHIPPED, OrderStatus.CANCELLED));
     }
 
     @Test
@@ -232,6 +295,22 @@ class OrderServiceImplTest {
         assertEquals(OrderStatus.CANCELLED, result.getStatus());
         assertEquals("Changed my mind", result.getCancelReason());
         assertNotNull(result.getCancelledAt());
+        verify(inventoryPort).releaseReservedStock("PROD-001", 2);
+    }
+
+    @Test
+    void testCancelOrderPaidTriggersRefund() {
+        testOrder.setStatus(OrderStatus.PAID);
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(testOrder));
+        when(orderRepository.save(any(Order.class))).thenReturn(testOrder);
+
+        CancelOrderRequest request = CancelOrderRequest.builder()
+                .reason("Out of stock")
+                .build();
+
+        orderService.cancelOrder(1L, request);
+
+        verify(walletPort).refundBalance("titiper-001", new BigDecimal("100.00"));
     }
 
     @Test
@@ -288,8 +367,11 @@ class OrderServiceImplTest {
         Order completedOrder = Order.builder()
                 .id(1L)
                 .status(OrderStatus.COMPLETED)
+                .jastiperUserId("jastiper-001")
+                .productId("PROD-001")
                 .build();
         when(orderRepository.findById(1L)).thenReturn(Optional.of(completedOrder));
+        when(ratingRepository.findByOrderId(1L)).thenReturn(List.of());
         when(ratingRepository.save(any(Rating.class))).thenAnswer(invocation -> {
             Rating rating = invocation.getArgument(0);
             rating.setId(1L);
@@ -324,6 +406,21 @@ class OrderServiceImplTest {
         assertThrows(CannotRateOrderException.class, () -> {
             orderService.submitRating(1L, request);
         });
+    }
+
+    @Test
+    void testSubmitRatingDuplicateRejected() {
+        Order completedOrder = Order.builder()
+                .id(1L)
+                .status(OrderStatus.COMPLETED)
+                .build();
+
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(completedOrder));
+        when(ratingRepository.findByOrderId(1L)).thenReturn(List.of(Rating.builder().id(1L).orderId(1L).build()));
+
+        RatingRequest request = RatingRequest.builder().ratingValue(5).build();
+
+        assertThrows(DuplicateRatingException.class, () -> orderService.submitRating(1L, request));
     }
 
     @Test
@@ -400,4 +497,3 @@ class OrderServiceImplTest {
         assertEquals(1, result.size());
     }
 }
-
