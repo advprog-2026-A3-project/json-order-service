@@ -43,6 +43,9 @@ dependencies {
     implementation("org.flywaydb:flyway-core")
     runtimeOnly("org.flywaydb:flyway-database-postgresql")
 
+    // --- Validation ---
+    implementation("org.springframework.boot:spring-boot-starter-validation") // Jakarta Validation support
+
     // --- Utils ---
     compileOnly("org.projectlombok:lombok")
     developmentOnly("org.springframework.boot:spring-boot-devtools")
