@@ -5,12 +5,14 @@ import id.ac.ui.cs.advprog.order.model.Order;
 import id.ac.ui.cs.advprog.order.model.OrderStatus;
 import id.ac.ui.cs.advprog.order.service.OrderMapper;
 import id.ac.ui.cs.advprog.order.service.OrderService;
+import id.ac.ui.cs.advprog.order.service.RatingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.ui.ExtendedModelMap;
 import org.springframework.ui.Model;
 
 import java.math.BigDecimal;
+import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -24,13 +26,15 @@ class OrderControllerTest {
 
     private OrderService orderService;
     private OrderMapper orderMapper;
+    private RatingService ratingService;
     private OrderController controller;
 
     @BeforeEach
     void setUp() {
         orderService = mock(OrderService.class);
         orderMapper = mock(OrderMapper.class);
-        controller = new OrderController(orderService, orderMapper);
+        ratingService = mock(RatingService.class);
+        controller = new OrderController(orderService, orderMapper, ratingService);
     }
 
     @Test
@@ -55,15 +59,18 @@ class OrderControllerTest {
     }
 
     @Test
-    void orderList_populatesOrdersAndMessages() {
+    void orderList_populatesOrdersRatingsAndViewerFlags() {
         Model model = new ExtendedModelMap();
         Order order = sampleOrder(1L);
         when(orderService.getAllOrders()).thenReturn(List.of(order));
+        when(ratingService.getRatingsByOrderIds(List.of(1L))).thenReturn(Collections.emptyMap());
 
-        String view = controller.orderList("ok", null, model);
+        String view = controller.orderList("ok", null, "titiper", model);
 
         assertEquals("order-list", view);
         assertEquals("ok", model.getAttribute("successMessage"));
+        assertEquals("titiper", model.getAttribute("viewer"));
+        assertEquals(true, model.getAttribute("isTitiperView"));
         assertEquals(1, ((List<?>) model.getAttribute("orders")).size());
     }
 
@@ -85,19 +92,19 @@ class OrderControllerTest {
     }
 
     @Test
-    void updateOrderStatus_redirectsWithSuccessMessage() {
-        String redirect = controller.updateOrderStatus(10L, OrderStatus.PAID);
+    void updateOrderStatus_redirectsWithSuccessMessageAndViewer() {
+        String redirect = controller.updateOrderStatus(10L, OrderStatus.PAID, "jastiper");
 
         verify(orderService).updateStatus(10L, OrderStatus.PAID);
-        assertEquals("redirect:/order/list?success=Status+order+berhasil+diupdate", redirect);
+        assertEquals("redirect:/order/list?viewer=jastiper&success=Status+order+berhasil+diupdate", redirect);
     }
 
     @Test
-    void cancelOrder_redirectsWithSuccessMessage() {
-        String redirect = controller.cancelOrder(10L);
+    void cancelOrder_redirectsWithSuccessMessageAndViewer() {
+        String redirect = controller.cancelOrder(10L, "jastiper");
 
         verify(orderService).cancelOrderById(10L);
-        assertEquals("redirect:/order/list?success=Order+berhasil+dibatalkan", redirect);
+        assertEquals("redirect:/order/list?viewer=jastiper&success=Order+berhasil+dibatalkan", redirect);
     }
 
     private Order sampleOrder(Long id) {

@@ -8,12 +8,14 @@ import id.ac.ui.cs.advprog.order.model.Order;
 import id.ac.ui.cs.advprog.order.model.OrderStatus;
 import id.ac.ui.cs.advprog.order.service.OrderMapper;
 import id.ac.ui.cs.advprog.order.service.OrderService;
+import id.ac.ui.cs.advprog.order.service.RatingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.math.BigDecimal;
+import java.util.Collections;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -35,7 +37,8 @@ class OrderControllerRestTest {
     void setUp() {
         orderService = mock(OrderService.class);
         OrderMapper orderMapper = mock(OrderMapper.class);
-        OrderController controller = new OrderController(orderService, orderMapper);
+        RatingService ratingService = mock(RatingService.class);
+        OrderController controller = new OrderController(orderService, orderMapper, ratingService);
 
         Order order = new Order();
         order.setId(1L);
@@ -50,6 +53,7 @@ class OrderControllerRestTest {
         when(orderService.getAllOrders()).thenReturn(List.of(order));
         when(orderService.getOrderById(1L)).thenReturn(order);
         when(orderMapper.toRequest(order)).thenReturn(new OrderCreateRequest());
+        when(ratingService.getRatingsByOrderIds(List.of(1L))).thenReturn(Collections.emptyMap());
 
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new OrderExceptionHandler())
@@ -91,14 +95,14 @@ class OrderControllerRestTest {
         mockMvc.perform(post("/order/status/1")
                         .param("status", "PAID"))
                 .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("/order/list?success=Status+order+berhasil+diupdate"));
+                .andExpect(redirectedUrl("/order/list?viewer=jastiper&success=Status+order+berhasil+diupdate"));
     }
 
     @Test
     void postCancel_redirectsToSuccessMessage() throws Exception {
         mockMvc.perform(post("/order/cancel/1"))
                 .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("/order/list?success=Order+berhasil+dibatalkan"));
+                .andExpect(redirectedUrl("/order/list?viewer=jastiper&success=Order+berhasil+dibatalkan"));
     }
 
     @Test

@@ -2,6 +2,8 @@ package id.ac.ui.cs.advprog.order.controller;
 
 import id.ac.ui.cs.advprog.order.exception.InvalidOrderStatusTransitionException;
 import id.ac.ui.cs.advprog.order.exception.OrderNotFoundException;
+import id.ac.ui.cs.advprog.order.exception.RatingAlreadyExistsException;
+import id.ac.ui.cs.advprog.order.exception.RatingNotAllowedException;
 import id.ac.ui.cs.advprog.order.exception.SelfPurchaseNotAllowedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
@@ -24,6 +26,16 @@ public class OrderExceptionHandler {
     @ExceptionHandler(SelfPurchaseNotAllowedException.class)
     public String handleSelfPurchase(SelfPurchaseNotAllowedException ex) {
         return "redirect:/order/list?error=Jastiper+tidak+boleh+beli+barang+sendiri";
+    }
+
+    @ExceptionHandler(RatingAlreadyExistsException.class)
+    public String handleRatingAlreadyExists(RatingAlreadyExistsException ex) {
+        return "redirect:/order/list?error=Order+ini+sudah+pernah+dirating";
+    }
+
+    @ExceptionHandler(RatingNotAllowedException.class)
+    public String handleRatingNotAllowed(RatingNotAllowedException ex) {
+        return "redirect:/order/list?error=" + ex.getMessage().replace(" ", "+");
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

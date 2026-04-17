@@ -203,6 +203,48 @@ tr:hover td {
     padding: 28px 8px;
 }
 
+.viewer-switch {
+    margin-top: 12px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.viewer-label {
+    color: var(--muted);
+    font-size: 0.86rem;
+}
+
+.muted-text {
+    color: var(--muted);
+    font-size: 0.82rem;
+}
+
+.rating-chip {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 120px;
+}
+
+.rating-chip strong {
+    color: #175cd3;
+}
+
+.rating-form-inline {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.rating-form-inline input[type="number"] {
+    width: 78px;
+}
+
+.rating-form-inline input[type="text"] {
+    width: 150px;
+}
+
 @media (max-width: 760px) {
     .form-grid {
         grid-template-columns: 1fr;
@@ -213,5 +255,8 @@ tr:hover td {
         align-items: flex-start;
         gap: 12px;
     }
-}
 
+    .rating-form-inline {
+        flex-wrap: wrap;
+    }
+}
