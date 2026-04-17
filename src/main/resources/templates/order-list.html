@@ -1,85 +1,95 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org">
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
-    <title>JSON | Transaction History</title>
-    <style>
-        body {
-            background-color: #1a1a1a;
-            color: white;
-            font-family: 'Segoe UI', sans-serif;
-            padding: 50px;
-        }
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 30px;
-            border-bottom: 2px solid #D4AF37;
-            padding-bottom: 10px;
-        }
-        h1 { color: #D4AF37; margin: 0; }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background: #2c2c2c;
-            border-radius: 10px;
-            overflow: hidden;
-        }
-        th {
-            background: #D4AF37;
-            color: black;
-            padding: 15px;
-            text-align: left;
-        }
-        td {
-            padding: 15px;
-            border-bottom: 1px solid #444;
-        }
-        tr:hover { background: #383838; }
-        .status-badge {
-            background: #444;
-            padding: 5px 10px;
-            border-radius: 5px;
-            font-size: 12px;
-            color: #FFD700;
-            border: 1px solid #D4AF37;
-        }
-        .btn-add {
-            text-decoration: none;
-            background: var(--gold-primary);
-            color: black;
-            padding: 10px 20px;
-            border-radius: 5px;
-            font-weight: bold;
-        }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order List</title>
+    <link rel="stylesheet" th:href="@{/css/order.css}">
 </head>
 <body>
-<div class="header">
-    <h1>Transaction History</h1>
-    <a href="/order/create" class="btn-add">+ New Jastip Order</a>
-</div>
+<main class="page">
+    <header class="topbar">
+        <div>
+            <h1>Order Dashboard</h1>
+            <p class="subtitle">Kelola transaksi order dengan tampilan bersih dan cepat.</p>
+        </div>
+        <a class="btn btn-primary" th:href="@{/order/create}">+ New Order</a>
+    </header>
 
-<table>
-    <thead>
-    <tr>
-        <th>Order ID</th>
-        <th>Product</th>
-        <th>Destination</th>
-        <th>Status</th>
-    </tr>
-    </thead>
-    <tbody>
-    <tr th:each="order : ${orders}">
-        <td th:text="${'#JSON-' + order.id}"></td>
-        <td th:text="${order.productName}" style="font-weight: bold;"></td>
-        <td th:text="${order.shippingAddress}"></td>
-        <td>
-            <span class="status-badge" th:text="${order.status}"></span>
-        </td>
-    </tr>
-    </tbody>
-</table>
+    <div class="alert alert-success" data-autohide="true" th:if="${successMessage}" th:text="${successMessage}"></div>
+    <div class="alert alert-error" data-autohide="true" th:if="${errorMessage}" th:text="${errorMessage}"></div>
+
+    <section class="card">
+        <div class="table-wrap" th:if="${!orders.isEmpty()}">
+            <table>
+                <thead>
+                <tr>
+                    <th>Order ID</th>
+                    <th>Product</th>
+                    <th>Titiper</th>
+                    <th>Qty</th>
+                    <th>Total</th>
+                    <th>Destination</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="order : ${orders}">
+                    <td th:text="${'#JSON-' + order.id}"></td>
+                    <td>
+                        <strong th:text="${order.productName}"></strong><br>
+                        <span th:text="${order.productId}"></span>
+                    </td>
+                    <td th:text="${order.titiperUserId}"></td>
+                    <td th:text="${order.quantity}"></td>
+                    <td th:text="${order.totalPrice}"></td>
+                    <td th:text="${order.shippingAddress}"></td>
+                    <td><span class="status-pill" th:text="${order.status}"></span></td>
+                    <td>
+                        <div class="row-actions">
+                            <a class="btn btn-secondary" th:href="@{/order/edit/{id}(id=${order.id})}">Edit</a>
+
+                            <form th:if="${order.status.name() == 'PENDING'}" th:action="@{/order/status/{id}(id=${order.id})}" method="post">
+                                <input type="hidden" name="status" value="PAID">
+                                <button class="btn btn-secondary" type="submit">Mark Paid</button>
+                            </form>
+
+                            <form th:if="${order.status.name() == 'PAID'}" th:action="@{/order/status/{id}(id=${order.id})}" method="post">
+                                <input type="hidden" name="status" value="PURCHASED">
+                                <button class="btn btn-secondary" type="submit">Mark Purchased</button>
+                            </form>
+
+                            <form th:if="${order.status.name() == 'PURCHASED'}" th:action="@{/order/status/{id}(id=${order.id})}" method="post">
+                                <input type="hidden" name="status" value="SHIPPED">
+                                <button class="btn btn-secondary" type="submit">Mark Shipped</button>
+                            </form>
+
+                            <form th:if="${order.status.name() == 'SHIPPED'}" th:action="@{/order/status/{id}(id=${order.id})}" method="post">
+                                <input type="hidden" name="status" value="COMPLETED">
+                                <button class="btn btn-secondary" type="submit">Mark Completed</button>
+                            </form>
+
+                            <form class="js-cancel-form"
+                                  th:if="${order.status.name() == 'PENDING' || order.status.name() == 'PAID' || order.status.name() == 'PURCHASED'}"
+                                  th:action="@{/order/cancel/{id}(id=${order.id})}"
+                                  method="post"
+                                  th:attr="data-product=${order.productName}">
+                                <button class="btn btn-danger" type="submit">Cancel</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="empty-state" th:if="${orders.isEmpty()}">
+            Belum ada order tersimpan. Klik <strong>New Order</strong> untuk menambahkan data pertama.
+        </div>
+    </section>
+</main>
+
+<script th:src="@{/js/order.js}"></script>
 </body>
 </html>

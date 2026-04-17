@@ -1,55 +1,115 @@
 package id.ac.ui.cs.advprog.order.controller;
 
+import id.ac.ui.cs.advprog.order.dto.OrderCreateRequest;
 import id.ac.ui.cs.advprog.order.model.Order;
-import id.ac.ui.cs.advprog.order.service.OrderService; // Import Service
+import id.ac.ui.cs.advprog.order.model.OrderStatus;
+import id.ac.ui.cs.advprog.order.service.OrderMapper;
+import id.ac.ui.cs.advprog.order.service.OrderService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.ui.ExtendedModelMap;
+import org.springframework.ui.Model;
 
-import java.util.ArrayList;
+import java.math.BigDecimal;
+import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@WebMvcTest(OrderController.class) // Hanya fokus test Layer Controller
 class OrderControllerTest {
 
-    @Autowired
-    private MockMvc mockMvc;
+    private OrderService orderService;
+    private OrderMapper orderMapper;
+    private OrderController controller;
 
-    @SuppressWarnings("deprecation")
-    @MockBean
-    private OrderService orderService; // Mock Service, bukan Repository
-
-    @Test
-    void testCreateOrderPage() throws Exception {
-        mockMvc.perform(get("/order/create"))
-                .andExpect(status().isOk())
-                .andExpect(view().name("create-order"));
+    @BeforeEach
+    void setUp() {
+        orderService = mock(OrderService.class);
+        orderMapper = mock(OrderMapper.class);
+        controller = new OrderController(orderService, orderMapper);
     }
 
     @Test
-    void testSubmitOrder() throws Exception {
-        mockMvc.perform(post("/order/create")
-                        .param("productName", "Limited Sushi")
-                        .param("quantity", "2")
-                        .param("shippingAddress", "Depok, Indonesia"))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("/order/list"));
+    void createOrderPage_returnsTemplateAndFormObject() {
+        Model model = new ExtendedModelMap();
+
+        String view = controller.createOrderPage(model);
+
+        assertEquals("create-order", view);
+        assertNotNull(model.getAttribute("checkoutRequest"));
+        assertInstanceOf(OrderCreateRequest.class, model.getAttribute("checkoutRequest"));
     }
 
     @Test
-    void testListOrders() throws Exception {
-        // Mock perilaku Service
-        when(orderService.findAllOrders()).thenReturn(new ArrayList<Order>());
+    void createOrder_redirectsToListWithSuccessMessage() {
+        OrderCreateRequest request = new OrderCreateRequest();
 
-        mockMvc.perform(get("/order/list"))
-                .andExpect(status().isOk())
-                .andExpect(view().name("order-list"))
-                .andExpect(model().attributeExists("orders"));
+        String redirect = controller.createOrder(request);
+
+        verify(orderService).createOrder(request);
+        assertEquals("redirect:/order/list?success=Order+berhasil+disimpan", redirect);
+    }
+
+    @Test
+    void orderList_populatesOrdersAndMessages() {
+        Model model = new ExtendedModelMap();
+        Order order = sampleOrder(1L);
+        when(orderService.getAllOrders()).thenReturn(List.of(order));
+
+        String view = controller.orderList("ok", null, model);
+
+        assertEquals("order-list", view);
+        assertEquals("ok", model.getAttribute("successMessage"));
+        assertEquals(1, ((List<?>) model.getAttribute("orders")).size());
+    }
+
+    @Test
+    void editOrderPage_returnsEditTemplateForExistingOrder() {
+        Model model = new ExtendedModelMap();
+        Order order = sampleOrder(2L);
+        OrderCreateRequest request = new OrderCreateRequest();
+
+        when(orderService.getOrderById(2L)).thenReturn(order);
+        when(orderMapper.toRequest(order)).thenReturn(request);
+
+        String view = controller.editOrderPage(2L, model);
+
+        assertEquals("edit-order", view);
+        assertEquals(2L, model.getAttribute("orderId"));
+        assertEquals(request, model.getAttribute("checkoutRequest"));
+        assertEquals(OrderStatus.PENDING, model.getAttribute("status"));
+    }
+
+    @Test
+    void updateOrderStatus_redirectsWithSuccessMessage() {
+        String redirect = controller.updateOrderStatus(10L, OrderStatus.PAID);
+
+        verify(orderService).updateStatus(10L, OrderStatus.PAID);
+        assertEquals("redirect:/order/list?success=Status+order+berhasil+diupdate", redirect);
+    }
+
+    @Test
+    void cancelOrder_redirectsWithSuccessMessage() {
+        String redirect = controller.cancelOrder(10L);
+
+        verify(orderService).cancelOrderById(10L);
+        assertEquals("redirect:/order/list?success=Order+berhasil+dibatalkan", redirect);
+    }
+
+    private Order sampleOrder(Long id) {
+        Order order = new Order();
+        order.setId(id);
+        order.setProductId("PROD-001");
+        order.setProductName("Item");
+        order.setTitiperUserId("titiper-1");
+        order.setQuantity(1);
+        order.setTotalPrice(new BigDecimal("10000"));
+        order.setShippingAddress("Depok");
+        order.setStatus(OrderStatus.PENDING);
+        return order;
     }
 }

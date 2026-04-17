@@ -1,17 +1,12 @@
 package id.ac.ui.cs.advprog.order.service;
 
-import id.ac.ui.cs.advprog.order.dto.CancelOrderRequest;
-import id.ac.ui.cs.advprog.order.dto.OrderCheckoutRequest;
-import id.ac.ui.cs.advprog.order.dto.RatingRequest;
-import id.ac.ui.cs.advprog.order.exception.CannotCancelOrderException;
-import id.ac.ui.cs.advprog.order.exception.CannotRateOrderException;
-import id.ac.ui.cs.advprog.order.exception.InvalidStatusTransitionException;
+import id.ac.ui.cs.advprog.order.dto.OrderCreateRequest;
+import id.ac.ui.cs.advprog.order.exception.InvalidOrderStatusTransitionException;
 import id.ac.ui.cs.advprog.order.exception.OrderNotFoundException;
+import id.ac.ui.cs.advprog.order.exception.SelfPurchaseNotAllowedException;
 import id.ac.ui.cs.advprog.order.model.Order;
 import id.ac.ui.cs.advprog.order.model.OrderStatus;
-import id.ac.ui.cs.advprog.order.model.Rating;
 import id.ac.ui.cs.advprog.order.repository.OrderRepository;
-import id.ac.ui.cs.advprog.order.repository.RatingRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,21 +15,16 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/**
- * Comprehensive unit tests for OrderServiceImpl.
- * Tests checkout, status transitions, cancellation, and rating functionality.
- */
 @ExtendWith(MockitoExtension.class)
 class OrderServiceImplTest {
 
@@ -42,362 +32,228 @@ class OrderServiceImplTest {
     private OrderRepository orderRepository;
 
     @Mock
-    private RatingRepository ratingRepository;
+    private OrderMapper orderMapper;
 
     @InjectMocks
     private OrderServiceImpl orderService;
 
-    private Order testOrder;
-    private OrderCheckoutRequest checkoutRequest;
+    private OrderCreateRequest request;
+    private Order order;
 
     @BeforeEach
     void setUp() {
-        // Setup test order
-        testOrder = Order.builder()
-                .id(1L)
-                .productId("PROD-001")
-                .productName("Limited Sushi")
-                .titiperUserId("titiper-001")
-                .jastiperUserId("jastiper-001")
-                .quantity(2)
-                .shippingAddress("Depok, Indonesia")
-                .totalPrice(new BigDecimal("100.00"))
-                .status(OrderStatus.PENDING)
-                .createdAt(LocalDateTime.now())
-                .updatedAt(LocalDateTime.now())
-                .build();
+        request = new OrderCreateRequest();
+        request.setProductId("PROD-001");
+        request.setProductName("MacBook Sleeve");
+        request.setTitiperUserId("titiper-1");
+        request.setJastiperUserId("jastiper-1");
+        request.setQuantity(2);
+        request.setTotalPrice(new BigDecimal("120000"));
+        request.setShippingAddress("Depok");
 
-        // Setup checkout request
-        checkoutRequest = OrderCheckoutRequest.builder()
-                .productId("PROD-001")
-                .quantity(2)
-                .shippingAddress("Depok, Indonesia")
-                .titiperUserId("titiper-001")
-                .build();
+        order = new Order();
+        order.setId(1L);
+        order.setProductId("PROD-001");
+        order.setStatus(OrderStatus.PENDING);
     }
 
-    // ========== Checkout Tests ==========
-
     @Test
-    void testCheckoutOrderSuccess() {
-        when(orderRepository.save(any(Order.class))).thenReturn(testOrder);
+    void createOrder_setsPendingAndSaves() {
+        when(orderMapper.toEntity(request)).thenReturn(order);
+        when(orderRepository.save(order)).thenReturn(order);
 
-        Order result = orderService.checkoutOrder(checkoutRequest);
+        Order result = orderService.createOrder(request);
 
         assertNotNull(result);
-        assertEquals(testOrder.getProductId(), result.getProductId());
-        assertEquals(testOrder.getTitiperUserId(), result.getTitiperUserId());
         assertEquals(OrderStatus.PENDING, result.getStatus());
-        verify(orderRepository).save(any(Order.class));
-    }
-
-    // ========== Order Retrieval Tests ==========
-
-    @Test
-    void testGetOrderByIdSuccess() {
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(testOrder));
-
-        Optional<Order> result = orderService.getOrderById(1L);
-
-        assertTrue(result.isPresent());
-        assertEquals(testOrder.getId(), result.get().getId());
+        verify(orderMapper).toEntity(request);
+        verify(orderRepository).save(order);
     }
 
     @Test
-    void testGetOrderByIdNotFound() {
-        when(orderRepository.findById(999L)).thenReturn(Optional.empty());
+    void getAllOrders_returnsRepositoryResult() {
+        when(orderRepository.findAllByOrderByIdDesc()).thenReturn(List.of(order));
 
-        Optional<Order> result = orderService.getOrderById(999L);
-
-        assertFalse(result.isPresent());
-    }
-
-    @Test
-    void testGetOrdersByTitiper() {
-        List<Order> orders = Arrays.asList(testOrder);
-        when(orderRepository.findByTitiperUserId("titiper-001")).thenReturn(orders);
-
-        List<Order> result = orderService.getOrdersByTitiper("titiper-001");
+        List<Order> result = orderService.getAllOrders();
 
         assertEquals(1, result.size());
-        assertEquals(testOrder.getId(), result.get(0).getId());
+        assertEquals(1L, result.getFirst().getId());
     }
 
     @Test
-    void testGetOrdersByJastiper() {
-        List<Order> orders = Arrays.asList(testOrder);
-        when(orderRepository.findByJastiperUserId("jastiper-001")).thenReturn(orders);
+    void getOrderById_throwsWhenNotFound() {
+        when(orderRepository.findById(99L)).thenReturn(Optional.empty());
 
-        List<Order> result = orderService.getOrdersByJastiper("jastiper-001");
-
-        assertEquals(1, result.size());
-        assertEquals(testOrder.getId(), result.get(0).getId());
+        assertThrows(OrderNotFoundException.class, () -> orderService.getOrderById(99L));
     }
 
     @Test
-    void testGetOrdersByStatus() {
-        List<Order> orders = Arrays.asList(testOrder);
-        when(orderRepository.findByStatus(OrderStatus.PENDING)).thenReturn(orders);
+    void updateOrder_mapsAndSavesExistingEntity() {
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(order)).thenReturn(order);
 
-        List<Order> result = orderService.getOrdersByStatus(OrderStatus.PENDING);
+        Order result = orderService.updateOrder(1L, request);
 
-        assertEquals(1, result.size());
-        assertEquals(OrderStatus.PENDING, result.get(0).getStatus());
-    }
-
-    // ========== Status Transition Tests ==========
-
-    @Test
-    void testCanTransitionPendingToPaid() {
-        assertTrue(orderService.canTransitionStatus(OrderStatus.PENDING, OrderStatus.PAID));
+        assertEquals(1L, result.getId());
+        verify(orderMapper).copyToExisting(request, order);
+        verify(orderRepository).save(order);
     }
 
     @Test
-    void testCanTransitionPaidToPurchased() {
-        assertTrue(orderService.canTransitionStatus(OrderStatus.PAID, OrderStatus.PURCHASED));
+    void updateOrder_throwsWhenStatusIsCompleted() {
+        order.setStatus(OrderStatus.COMPLETED);
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+
+        assertThrows(InvalidOrderStatusTransitionException.class, () -> orderService.updateOrder(1L, request));
+        verify(orderRepository, never()).save(order);
     }
 
     @Test
-    void testCanTransitionPurchasedToShipped() {
-        assertTrue(orderService.canTransitionStatus(OrderStatus.PURCHASED, OrderStatus.SHIPPED));
-    }
+    void updateStatus_allowsValidTransition() {
+        order.setStatus(OrderStatus.PAID);
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(order)).thenReturn(order);
 
-    @Test
-    void testCanTransitionShippedToCompleted() {
-        assertTrue(orderService.canTransitionStatus(OrderStatus.SHIPPED, OrderStatus.COMPLETED));
-    }
-
-    @Test
-    void testCannotTransitionCompletedToAny() {
-        assertFalse(orderService.canTransitionStatus(OrderStatus.COMPLETED, OrderStatus.PAID));
-        assertFalse(orderService.canTransitionStatus(OrderStatus.COMPLETED, OrderStatus.PURCHASED));
-    }
-
-    @Test
-    void testCanTransitionAnyStatusToCancelled() {
-        assertTrue(orderService.canTransitionStatus(OrderStatus.PENDING, OrderStatus.CANCELLED));
-        assertTrue(orderService.canTransitionStatus(OrderStatus.PAID, OrderStatus.CANCELLED));
-        assertTrue(orderService.canTransitionStatus(OrderStatus.PURCHASED, OrderStatus.CANCELLED));
-    }
-
-    @Test
-    void testUpdateOrderStatusSuccess() {
-        Order paidOrder = Order.builder()
-                .id(1L)
-                .status(OrderStatus.PAID)
-                .build();
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(paidOrder));
-        when(orderRepository.save(any(Order.class))).thenReturn(paidOrder);
-
-        Order result = orderService.updateOrderStatus(1L, OrderStatus.PURCHASED);
+        Order result = orderService.updateStatus(1L, OrderStatus.PURCHASED);
 
         assertEquals(OrderStatus.PURCHASED, result.getStatus());
+        verify(orderRepository).save(order);
     }
 
     @Test
-    void testUpdateOrderStatusNotFound() {
-        when(orderRepository.findById(999L)).thenReturn(Optional.empty());
+    void updateStatus_allowsPendingToPaid() {
+        order.setStatus(OrderStatus.PENDING);
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(order)).thenReturn(order);
 
-        assertThrows(OrderNotFoundException.class, () -> {
-            orderService.updateOrderStatus(999L, OrderStatus.PAID);
-        });
+        Order result = orderService.updateStatus(1L, OrderStatus.PAID);
+
+        assertEquals(OrderStatus.PAID, result.getStatus());
+        verify(orderRepository).save(order);
     }
 
     @Test
-    void testUpdateOrderStatusInvalidTransition() {
-        Order completedOrder = Order.builder()
-                .id(1L)
-                .status(OrderStatus.COMPLETED)
-                .build();
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(completedOrder));
+    void updateStatus_allowsPendingToCancelled() {
+        order.setStatus(OrderStatus.PENDING);
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(order)).thenReturn(order);
 
-        assertThrows(InvalidStatusTransitionException.class, () -> {
-            orderService.updateOrderStatus(1L, OrderStatus.PAID);
-        });
-    }
-
-    // ========== Cancellation Tests ==========
-
-    @Test
-    void testCancelOrderBeforePaid() {
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(testOrder));
-        when(orderRepository.save(any(Order.class))).thenReturn(testOrder);
-
-        CancelOrderRequest request = CancelOrderRequest.builder()
-                .reason("Changed my mind")
-                .build();
-
-        Order result = orderService.cancelOrder(1L, request);
+        Order result = orderService.updateStatus(1L, OrderStatus.CANCELLED);
 
         assertEquals(OrderStatus.CANCELLED, result.getStatus());
-        assertEquals("Changed my mind", result.getCancelReason());
-        assertNotNull(result.getCancelledAt());
+        verify(orderRepository).save(order);
     }
 
     @Test
-    void testCancelOrderAfterShipped() {
-        Order shippedOrder = Order.builder()
-                .id(1L)
-                .status(OrderStatus.SHIPPED)
-                .build();
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(shippedOrder));
+    void updateStatus_allowsPurchasedToShipped() {
+        order.setStatus(OrderStatus.PURCHASED);
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(order)).thenReturn(order);
 
-        CancelOrderRequest request = CancelOrderRequest.builder()
-                .reason("Too late")
-                .build();
+        Order result = orderService.updateStatus(1L, OrderStatus.SHIPPED);
 
-        assertThrows(CannotCancelOrderException.class, () -> {
-            orderService.cancelOrder(1L, request);
-        });
+        assertEquals(OrderStatus.SHIPPED, result.getStatus());
+        verify(orderRepository).save(order);
     }
 
     @Test
-    void testCancelOrderAfterCompleted() {
-        Order completedOrder = Order.builder()
-                .id(1L)
-                .status(OrderStatus.COMPLETED)
-                .build();
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(completedOrder));
+    void updateStatus_allowsShippedToCompleted() {
+        order.setStatus(OrderStatus.SHIPPED);
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(order)).thenReturn(order);
 
-        CancelOrderRequest request = CancelOrderRequest.builder()
-                .reason("Too late")
-                .build();
+        Order result = orderService.updateStatus(1L, OrderStatus.COMPLETED);
 
-        assertThrows(CannotCancelOrderException.class, () -> {
-            orderService.cancelOrder(1L, request);
-        });
+        assertEquals(OrderStatus.COMPLETED, result.getStatus());
+        verify(orderRepository).save(order);
     }
 
     @Test
-    void testCancelOrderNotFound() {
-        when(orderRepository.findById(999L)).thenReturn(Optional.empty());
+    void updateStatus_allowsSameStatusTransition() {
+        order.setStatus(OrderStatus.PAID);
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(order)).thenReturn(order);
 
-        CancelOrderRequest request = CancelOrderRequest.builder()
-                .reason("Not found")
-                .build();
+        Order result = orderService.updateStatus(1L, OrderStatus.PAID);
 
-        assertThrows(OrderNotFoundException.class, () -> {
-            orderService.cancelOrder(999L, request);
-        });
-    }
-
-    // ========== Rating Tests ==========
-
-    @Test
-    void testSubmitRatingSuccess() {
-        Order completedOrder = Order.builder()
-                .id(1L)
-                .status(OrderStatus.COMPLETED)
-                .build();
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(completedOrder));
-        when(ratingRepository.save(any(Rating.class))).thenAnswer(invocation -> {
-            Rating rating = invocation.getArgument(0);
-            rating.setId(1L);
-            return rating;
-        });
-
-        RatingRequest request = RatingRequest.builder()
-                .ratingValue(5)
-                .review("Excellent product!")
-                .jastiperUserId("jastiper-001")
-                .productId("PROD-001")
-                .build();
-
-        var result = orderService.submitRating(1L, request);
-
-        assertNotNull(result);
-        assertEquals(5, result.getRatingValue());
-        assertEquals("Excellent product!", result.getReview());
+        assertEquals(OrderStatus.PAID, result.getStatus());
+        verify(orderRepository).save(order);
     }
 
     @Test
-    void testCannotRateIncompleteOrder() {
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(testOrder));
+    void updateStatus_rejectsInvalidTransition() {
+        order.setStatus(OrderStatus.PAID);
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
 
-        RatingRequest request = RatingRequest.builder()
-                .ratingValue(5)
-                .review("Good")
-                .jastiperUserId("jastiper-001")
-                .productId("PROD-001")
-                .build();
-
-        assertThrows(CannotRateOrderException.class, () -> {
-            orderService.submitRating(1L, request);
-        });
+        assertThrows(InvalidOrderStatusTransitionException.class,
+                () -> orderService.updateStatus(1L, OrderStatus.COMPLETED));
+        verify(orderRepository, never()).save(order);
     }
 
     @Test
-    void testGetRatingsByOrder() {
-        Rating rating = Rating.builder()
-                .id(1L)
-                .orderId(1L)
-                .ratingValue(5)
-                .build();
-        when(ratingRepository.findByOrderId(1L)).thenReturn(Arrays.asList(rating));
+    void updateStatus_rejectsWhenCurrentStatusCompleted() {
+        order.setStatus(OrderStatus.COMPLETED);
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
 
-        var results = orderService.getRatingsByOrder(1L);
-
-        assertEquals(1, results.size());
-        assertEquals(5, results.get(0).getRatingValue());
+        assertThrows(InvalidOrderStatusTransitionException.class,
+                () -> orderService.updateStatus(1L, OrderStatus.CANCELLED));
+        verify(orderRepository, never()).save(order);
     }
 
     @Test
-    void testGetAverageRatingForJastiper() {
-        when(ratingRepository.getAverageRatingForJastiper("jastiper-001"))
-                .thenReturn(Optional.of(4.5));
+    void updateStatus_rejectsWhenCurrentStatusCancelled() {
+        order.setStatus(OrderStatus.CANCELLED);
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
 
-        Optional<Double> result = orderService.getAverageRatingForJastiper("jastiper-001");
-
-        assertTrue(result.isPresent());
-        assertEquals(4.5, result.get());
+        assertThrows(InvalidOrderStatusTransitionException.class,
+                () -> orderService.updateStatus(1L, OrderStatus.PAID));
+        verify(orderRepository, never()).save(order);
     }
 
     @Test
-    void testGetAverageRatingForProduct() {
-        when(ratingRepository.getAverageRatingForProduct("PROD-001"))
-                .thenReturn(Optional.of(4.8));
+    void cancelOrderById_setsCancelledWhenAllowed() {
+        order.setStatus(OrderStatus.PAID);
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(order)).thenReturn(order);
 
-        Optional<Double> result = orderService.getAverageRatingForProduct("PROD-001");
+        Order result = orderService.cancelOrderById(1L);
 
-        assertTrue(result.isPresent());
-        assertEquals(4.8, result.get());
-    }
-
-    // ========== Legacy Method Tests ==========
-
-    @Test
-    void testCreateOrderLegacy() {
-        when(orderRepository.save(any(Order.class))).thenReturn(testOrder);
-
-        Order result = orderService.createOrder(testOrder);
-
-        assertNotNull(result);
-        assertEquals(OrderStatus.PENDING, result.getStatus());
-        verify(orderRepository).save(testOrder);
+        assertEquals(OrderStatus.CANCELLED, result.getStatus());
+        verify(orderRepository).save(order);
     }
 
     @Test
-    void testUpdateStatusLegacy() {
-        Order paidOrder = Order.builder()
-                .id(1L)
-                .status(OrderStatus.PAID)
-                .build();
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(paidOrder));
-        when(orderRepository.save(any(Order.class))).thenReturn(paidOrder);
+    void cancelOrderById_rejectsInvalidCancellation() {
+        order.setStatus(OrderStatus.SHIPPED);
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
 
-        Order result = orderService.updateStatus(1L, "PURCHASED");
-
-        assertEquals(OrderStatus.PURCHASED, result.getStatus());
+        assertThrows(InvalidOrderStatusTransitionException.class, () -> orderService.cancelOrderById(1L));
+        verify(orderRepository, never()).save(order);
     }
 
     @Test
-    void testFindAllOrders() {
-        List<Order> orders = Arrays.asList(testOrder);
-        when(orderRepository.findAll()).thenReturn(orders);
+    void cancelOrderById_throwsWhenNotFound() {
+        when(orderRepository.findById(42L)).thenReturn(Optional.empty());
 
-        List<Order> result = orderService.findAllOrders();
+        assertThrows(OrderNotFoundException.class, () -> orderService.cancelOrderById(42L));
+    }
 
-        assertEquals(1, result.size());
+    @Test
+    void createOrder_throwsWhenTitiperEqualsJastiper() {
+        request.setTitiperUserId("same-user");
+        request.setJastiperUserId("same-user");
+
+        assertThrows(SelfPurchaseNotAllowedException.class, () -> orderService.createOrder(request));
+        verify(orderRepository, never()).save(order);
+    }
+
+    @Test
+    void updateOrder_throwsWhenTitiperEqualsJastiper() {
+        request.setTitiperUserId("same-user");
+        request.setJastiperUserId("same-user");
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+
+        assertThrows(SelfPurchaseNotAllowedException.class, () -> orderService.updateOrder(1L, request));
+        verify(orderRepository, never()).save(order);
     }
 }
-

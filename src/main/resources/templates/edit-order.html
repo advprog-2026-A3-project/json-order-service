@@ -3,37 +3,41 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Create Order</title>
+    <title>Edit Order</title>
     <link rel="stylesheet" th:href="@{/css/order.css}">
 </head>
 <body>
 <main class="page">
     <header class="topbar">
         <div>
-            <h1>Create Order</h1>
-            <p class="subtitle">Input order sederhana dan simpan langsung ke database.</p>
+            <h1>Edit Order</h1>
+            <p class="subtitle" th:text="${'Update order #' + orderId}">Update order</p>
         </div>
         <a class="btn btn-secondary" th:href="@{/order/list}">Back to List</a>
     </header>
 
     <section class="card">
-        <form th:action="@{/order/create}" th:object="${checkoutRequest}" method="post">
+        <div class="alert alert-success" th:if="${status != null}">
+            Current Status: <strong th:text="${status}">PENDING</strong>
+        </div>
+
+        <form th:action="@{/order/edit/{id}(id=${orderId})}" th:object="${checkoutRequest}" method="post">
             <div class="form-grid">
                 <div class="field">
                     <label for="productId">Product ID</label>
-                    <input id="productId" type="text" th:field="*{productId}" placeholder="PROD-001" required>
+                    <input id="productId" type="text" th:field="*{productId}" required>
                 </div>
                 <div class="field">
                     <label for="productName">Product Name</label>
-                    <input id="productName" type="text" th:field="*{productName}" placeholder="AirPods Case" required>
+                    <input id="productName" type="text" th:field="*{productName}" required>
                 </div>
                 <div class="field">
                     <label for="titiperUserId">Titiper User ID</label>
-                    <input id="titiperUserId" type="text" th:field="*{titiperUserId}" placeholder="titiper-001" required>
+                    <input id="titiperUserId" type="text" th:field="*{titiperUserId}" required>
                 </div>
                 <div class="field">
                     <label for="jastiperUserId">Jastiper User ID</label>
-                    <input id="jastiperUserId" type="text" th:field="*{jastiperUserId}" placeholder="jastiper-001">
+                    <input id="jastiperUserId" type="text" th:field="*{jastiperUserId}">
                 </div>
                 <div class="field">
                     <label for="quantity">Quantity</label>
@@ -45,13 +49,13 @@
                 </div>
                 <div class="field full">
                     <label for="shippingAddress">Shipping Address</label>
-                    <textarea id="shippingAddress" th:field="*{shippingAddress}" rows="3" placeholder="Depok, Jawa Barat" required></textarea>
+                    <textarea id="shippingAddress" th:field="*{shippingAddress}" rows="3" required></textarea>
                 </div>
             </div>
 
             <div class="actions">
                 <a class="btn btn-secondary" th:href="@{/order/list}">Cancel</a>
-                <button class="btn btn-primary" type="submit">Save Order</button>
+                <button class="btn btn-primary" type="submit">Update Order</button>
             </div>
         </form>
     </section>
@@ -60,3 +64,4 @@
 <script th:src="@{/js/order.js}"></script>
 </body>
 </html>
+

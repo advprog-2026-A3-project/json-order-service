@@ -1,56 +1,63 @@
 package id.ac.ui.cs.advprog.order.service;
 
+import id.ac.ui.cs.advprog.order.dto.OrderCreateRequest;
 import id.ac.ui.cs.advprog.order.model.Order;
-import id.ac.ui.cs.advprog.order.model.OrderStatus;
-import id.ac.ui.cs.advprog.order.repository.OrderRepository;
-import id.ac.ui.cs.advprog.order.repository.RatingRepository;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.math.BigDecimal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.verify;
 
-@ExtendWith(MockitoExtension.class)
 class OrderServiceTest {
 
-    @Mock
-    private OrderRepository orderRepository;
-
-    @Mock
-    private RatingRepository ratingRepository;
-
-    @InjectMocks
-    private OrderServiceImpl orderService;
+    private final OrderMapper mapper = new OrderMapperImpl();
 
     @Test
-    void testCreateOrderLogic() {
+    void toEntity_mapsAllFields() {
+        OrderCreateRequest request = createRequest();
+
+        Order order = mapper.toEntity(request);
+
+        assertEquals("PROD-001", order.getProductId());
+        assertEquals("AirTag", order.getProductName());
+        assertEquals("titiper-1", order.getTitiperUserId());
+        assertEquals("jastiper-1", order.getJastiperUserId());
+        assertEquals(2, order.getQuantity());
+        assertEquals(new BigDecimal("50000"), order.getTotalPrice());
+        assertEquals("Depok", order.getShippingAddress());
+    }
+
+    @Test
+    void toRequest_mapsOrderForEditForm() {
         Order order = new Order();
-        order.setProductName("Limited Sushi");
-        order.setQuantity(2);
-        order.setShippingAddress("Depok");
+        order.setProductId("PROD-777");
+        order.setProductName("Power Adapter");
+        order.setTitiperUserId("titiper-x");
+        order.setJastiperUserId("jastiper-x");
+        order.setQuantity(1);
+        order.setTotalPrice(new BigDecimal("399000"));
+        order.setShippingAddress("Jakarta");
 
-        orderService.createOrder(order);
+        OrderCreateRequest request = mapper.toRequest(order);
 
-        verify(orderRepository).save(order);
-        assertEquals(OrderStatus.PENDING, order.getStatus());
+        assertEquals("PROD-777", request.getProductId());
+        assertEquals("Power Adapter", request.getProductName());
+        assertEquals("titiper-x", request.getTitiperUserId());
+        assertEquals("jastiper-x", request.getJastiperUserId());
+        assertEquals(1, request.getQuantity());
+        assertEquals(new BigDecimal("399000"), request.getTotalPrice());
+        assertEquals("Jakarta", request.getShippingAddress());
     }
 
-    @Test
-    void testStatusTransitionValid() {
-        assertTrue(orderService.canTransitionStatus(OrderStatus.PENDING, OrderStatus.PAID));
-        assertTrue(orderService.canTransitionStatus(OrderStatus.PAID, OrderStatus.PURCHASED));
-        assertTrue(orderService.canTransitionStatus(OrderStatus.PURCHASED, OrderStatus.SHIPPED));
-        assertTrue(orderService.canTransitionStatus(OrderStatus.SHIPPED, OrderStatus.COMPLETED));
-    }
-
-    @Test
-    void testStatusTransitionInvalid() {
-        assertTrue(!orderService.canTransitionStatus(OrderStatus.COMPLETED, OrderStatus.PAID));
-        assertTrue(!orderService.canTransitionStatus(OrderStatus.CANCELLED, OrderStatus.PAID));
-        assertTrue(!orderService.canTransitionStatus(OrderStatus.SHIPPED, OrderStatus.PAID));
+    private OrderCreateRequest createRequest() {
+        OrderCreateRequest request = new OrderCreateRequest();
+        request.setProductId("PROD-001");
+        request.setProductName("AirTag");
+        request.setTitiperUserId("titiper-1");
+        request.setJastiperUserId("jastiper-1");
+        request.setQuantity(2);
+        request.setTotalPrice(new BigDecimal("50000"));
+        request.setShippingAddress("Depok");
+        return request;
     }
 }
