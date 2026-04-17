@@ -2,6 +2,7 @@ package id.ac.ui.cs.advprog.order.service;
 
 import id.ac.ui.cs.advprog.order.dto.OrderCreateRequest;
 import id.ac.ui.cs.advprog.order.model.Order;
+import id.ac.ui.cs.advprog.order.model.OrderStatus;
 
 import java.util.List;
 
@@ -14,5 +15,7 @@ public interface OrderService {
 
     Order updateOrder(Long id, OrderCreateRequest request);
 
-    void deleteOrderById(Long id);
+    Order updateStatus(Long id, OrderStatus newStatus);
+
+    Order cancelOrderById(Long id);
 }

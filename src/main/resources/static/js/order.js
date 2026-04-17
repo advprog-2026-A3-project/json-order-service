@@ -1,9 +1,9 @@
 document.addEventListener("DOMContentLoaded", function () {
-    var deleteForms = document.querySelectorAll(".js-delete-form");
-    deleteForms.forEach(function (form) {
+    var cancelForms = document.querySelectorAll(".js-cancel-form");
+    cancelForms.forEach(function (form) {
         form.addEventListener("submit", function (event) {
             var product = form.getAttribute("data-product") || "order ini";
-            var confirmed = window.confirm("Hapus " + product + " dari database?");
+            var confirmed = window.confirm("Batalkan " + product + "?");
             if (!confirmed) {
                 event.preventDefault();
             }
@@ -17,4 +17,3 @@ document.addEventListener("DOMContentLoaded", function () {
         }, 3500);
     });
 });
-

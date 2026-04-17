@@ -31,19 +31,16 @@ jobs:
         run: chmod +x gradlew
 
       # Jalankan Testing & Jacoco untuk Coverage
-      - name: Run Tests & Jacoco Report
-        run: ./gradlew test jacocoTestReport
-
-      # Cek Coverage (Gagal jika di bawah 100%)
-      - name: Verify Coverage (100%)
-        run: ./gradlew jacocoTestCoverageVerification
+      - name: Run tests, coverage report, and verification
+        run: ./gradlew --no-daemon clean test jacocoTestReport jacocoTestCoverageVerification
 
       # Analisis Kode dengan SonarCloud
       - name: SonarCloud Scan
+        if: ${{ secrets.SONAR_TOKEN != '' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: ./gradlew sonar --info
+        run: ./gradlew --no-daemon sonar --info
 
   # --- STAGE 2: CD (Auto Deployment) ---
   deploy:
@@ -62,11 +59,11 @@ jobs:
       - name: Deploy to Staging
         if: github.ref == 'refs/heads/staging'
         run: |
-          echo "🚀 Deploying to STAGING environment..."
+          echo "Deploying to STAGING environment..."
           echo "Status: CI Passed, Quality OK. Ready for Testing."
 
       - name: Deploy to Production
         if: github.ref == 'refs/heads/main'
         run: |
-          echo "🔥 Deploying to PRODUCTION environment..."
+          echo "Deploying to PRODUCTION environment..."
           echo "Status: Critical checks passed. Going Live."

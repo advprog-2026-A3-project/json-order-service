@@ -49,8 +49,33 @@
                     <td>
                         <div class="row-actions">
                             <a class="btn btn-secondary" th:href="@{/order/edit/{id}(id=${order.id})}">Edit</a>
-                            <form class="js-delete-form" th:action="@{/order/delete/{id}(id=${order.id})}" method="post" th:attr="data-product=${order.productName}">
-                                <button class="btn btn-danger" type="submit">Delete</button>
+
+                            <form th:if="${order.status.name() == 'PENDING'}" th:action="@{/order/status/{id}(id=${order.id})}" method="post">
+                                <input type="hidden" name="status" value="PAID">
+                                <button class="btn btn-secondary" type="submit">Mark Paid</button>
+                            </form>
+
+                            <form th:if="${order.status.name() == 'PAID'}" th:action="@{/order/status/{id}(id=${order.id})}" method="post">
+                                <input type="hidden" name="status" value="PURCHASED">
+                                <button class="btn btn-secondary" type="submit">Mark Purchased</button>
+                            </form>
+
+                            <form th:if="${order.status.name() == 'PURCHASED'}" th:action="@{/order/status/{id}(id=${order.id})}" method="post">
+                                <input type="hidden" name="status" value="SHIPPED">
+                                <button class="btn btn-secondary" type="submit">Mark Shipped</button>
+                            </form>
+
+                            <form th:if="${order.status.name() == 'SHIPPED'}" th:action="@{/order/status/{id}(id=${order.id})}" method="post">
+                                <input type="hidden" name="status" value="COMPLETED">
+                                <button class="btn btn-secondary" type="submit">Mark Completed</button>
+                            </form>
+
+                            <form class="js-cancel-form"
+                                  th:if="${order.status.name() == 'PENDING' || order.status.name() == 'PAID' || order.status.name() == 'PURCHASED'}"
+                                  th:action="@{/order/cancel/{id}(id=${order.id})}"
+                                  method="post"
+                                  th:attr="data-product=${order.productName}">
+                                <button class="btn btn-danger" type="submit">Cancel</button>
                             </form>
                         </div>
                     </td>

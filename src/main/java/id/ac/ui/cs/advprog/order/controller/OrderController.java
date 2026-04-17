@@ -1,8 +1,8 @@
 package id.ac.ui.cs.advprog.order.controller;
 
 import id.ac.ui.cs.advprog.order.dto.OrderCreateRequest;
-import id.ac.ui.cs.advprog.order.exception.OrderNotFoundException;
 import id.ac.ui.cs.advprog.order.model.Order;
+import id.ac.ui.cs.advprog.order.model.OrderStatus;
 import id.ac.ui.cs.advprog.order.service.OrderMapper;
 import id.ac.ui.cs.advprog.order.service.OrderService;
 import org.springframework.stereotype.Controller;
@@ -55,34 +55,28 @@ public class OrderController {
 
     @GetMapping("/edit/{id}")
     public String editOrderPage(@PathVariable Long id, Model model) {
-        try {
-            Order order = orderService.getOrderById(id);
-            model.addAttribute("orderId", id);
-            model.addAttribute("checkoutRequest", orderMapper.toRequest(order));
-            model.addAttribute("status", order.getStatus());
-            return "edit-order";
-        } catch (OrderNotFoundException ex) {
-            return "redirect:/order/list?error=Order+tidak+ditemukan";
-        }
+        Order order = orderService.getOrderById(id);
+        model.addAttribute("orderId", id);
+        model.addAttribute("checkoutRequest", orderMapper.toRequest(order));
+        model.addAttribute("status", order.getStatus());
+        return "edit-order";
     }
 
     @PostMapping("/edit/{id}")
     public String editOrder(@PathVariable Long id, @ModelAttribute("checkoutRequest") OrderCreateRequest request) {
-        try {
-            orderService.updateOrder(id, request);
-            return "redirect:/order/list?success=Order+berhasil+diupdate";
-        } catch (OrderNotFoundException ex) {
-            return "redirect:/order/list?error=Order+tidak+ditemukan";
-        }
+        orderService.updateOrder(id, request);
+        return "redirect:/order/list?success=Order+berhasil+diupdate";
     }
 
-    @PostMapping("/delete/{id}")
-    public String deleteOrder(@PathVariable Long id) {
-        try {
-            orderService.deleteOrderById(id);
-            return "redirect:/order/list?success=Order+berhasil+dihapus";
-        } catch (OrderNotFoundException ex) {
-            return "redirect:/order/list?error=Order+tidak+ditemukan";
-        }
+    @PostMapping("/status/{id}")
+    public String updateOrderStatus(@PathVariable Long id, @RequestParam("status") OrderStatus status) {
+        orderService.updateStatus(id, status);
+        return "redirect:/order/list?success=Status+order+berhasil+diupdate";
+    }
+
+    @PostMapping("/cancel/{id}")
+    public String cancelOrder(@PathVariable Long id) {
+        orderService.cancelOrderById(id);
+        return "redirect:/order/list?success=Order+berhasil+dibatalkan";
     }
 }

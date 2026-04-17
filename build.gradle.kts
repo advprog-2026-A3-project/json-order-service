@@ -72,7 +72,6 @@ tasks.jacocoTestReport {
     }
 }
 
-// Target Coverage 100% dari kode lama dipertahankan
 tasks.jacocoTestCoverageVerification {
     violationRules {
         rule {
