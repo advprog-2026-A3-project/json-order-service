@@ -1,6 +1,9 @@
 package id.ac.ui.cs.advprog.order.controller;
 
 import id.ac.ui.cs.advprog.order.dto.OrderCreateRequest;
+import id.ac.ui.cs.advprog.order.exception.InvalidOrderStatusTransitionException;
+import id.ac.ui.cs.advprog.order.exception.OrderNotFoundException;
+import id.ac.ui.cs.advprog.order.exception.SelfPurchaseNotAllowedException;
 import id.ac.ui.cs.advprog.order.model.Order;
 import id.ac.ui.cs.advprog.order.model.OrderStatus;
 import id.ac.ui.cs.advprog.order.service.OrderMapper;
@@ -13,6 +16,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import java.math.BigDecimal;
 import java.util.List;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -25,10 +29,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class OrderControllerRestTest {
 
     private MockMvc mockMvc;
+    private OrderService orderService;
 
     @BeforeEach
     void setUp() {
-        OrderService orderService = mock(OrderService.class);
+        orderService = mock(OrderService.class);
         OrderMapper orderMapper = mock(OrderMapper.class);
         OrderController controller = new OrderController(orderService, orderMapper);
 
@@ -46,7 +51,9 @@ class OrderControllerRestTest {
         when(orderService.getOrderById(1L)).thenReturn(order);
         when(orderMapper.toRequest(order)).thenReturn(new OrderCreateRequest());
 
-        mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
+        mockMvc = MockMvcBuilders.standaloneSetup(controller)
+                .setControllerAdvice(new OrderExceptionHandler())
+                .build();
     }
 
     @Test
@@ -77,5 +84,56 @@ class OrderControllerRestTest {
                 .andExpect(status().isOk())
                 .andExpect(view().name("edit-order"))
                 .andExpect(model().attributeExists("checkoutRequest"));
+    }
+
+    @Test
+    void postStatus_redirectsToSuccessMessage() throws Exception {
+        mockMvc.perform(post("/order/status/1")
+                        .param("status", "PAID"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/order/list?success=Status+order+berhasil+diupdate"));
+    }
+
+    @Test
+    void postCancel_redirectsToSuccessMessage() throws Exception {
+        mockMvc.perform(post("/order/cancel/1"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/order/list?success=Order+berhasil+dibatalkan"));
+    }
+
+    @Test
+    void getEdit_whenOrderMissing_redirectsToErrorPageViaAdvice() throws Exception {
+        when(orderService.getOrderById(99L)).thenThrow(new OrderNotFoundException(99L));
+
+        mockMvc.perform(get("/order/edit/99"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/order/list?error=Order+tidak+ditemukan"));
+    }
+
+    @Test
+    void postCancel_whenTransitionInvalid_redirectsToErrorPageViaAdvice() throws Exception {
+        when(orderService.cancelOrderById(1L))
+                .thenThrow(new InvalidOrderStatusTransitionException(OrderStatus.SHIPPED, OrderStatus.CANCELLED));
+
+        mockMvc.perform(post("/order/cancel/1"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/order/list?error=Transisi+status+order+tidak+valid"));
+    }
+
+    @Test
+    void postCreate_whenSelfPurchase_redirectsToErrorPageViaAdvice() throws Exception {
+        when(orderService.createOrder(any(OrderCreateRequest.class)))
+                .thenThrow(new SelfPurchaseNotAllowedException());
+
+        mockMvc.perform(post("/order/create")
+                        .param("productId", "PROD-1")
+                        .param("productName", "Item")
+                        .param("titiperUserId", "same-user")
+                        .param("jastiperUserId", "same-user")
+                        .param("quantity", "1")
+                        .param("totalPrice", "1000")
+                        .param("shippingAddress", "Depok"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/order/list?error=Jastiper+tidak+boleh+beli+barang+sendiri"));
     }
 }

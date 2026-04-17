@@ -1,7 +1,6 @@
 package id.ac.ui.cs.advprog.order.controller;
 
 import id.ac.ui.cs.advprog.order.dto.OrderCreateRequest;
-import id.ac.ui.cs.advprog.order.exception.OrderNotFoundException;
 import id.ac.ui.cs.advprog.order.model.Order;
 import id.ac.ui.cs.advprog.order.model.OrderStatus;
 import id.ac.ui.cs.advprog.order.service.OrderMapper;
@@ -86,21 +85,19 @@ class OrderControllerTest {
     }
 
     @Test
-    void editOrderPage_redirectsWhenOrderMissing() {
-        Model model = new ExtendedModelMap();
-        when(orderService.getOrderById(99L)).thenThrow(new OrderNotFoundException(99L));
+    void updateOrderStatus_redirectsWithSuccessMessage() {
+        String redirect = controller.updateOrderStatus(10L, OrderStatus.PAID);
 
-        String view = controller.editOrderPage(99L, model);
-
-        assertEquals("redirect:/order/list?error=Order+tidak+ditemukan", view);
+        verify(orderService).updateStatus(10L, OrderStatus.PAID);
+        assertEquals("redirect:/order/list?success=Status+order+berhasil+diupdate", redirect);
     }
 
     @Test
-    void deleteOrder_redirectsWithSuccessMessage() {
-        String redirect = controller.deleteOrder(10L);
+    void cancelOrder_redirectsWithSuccessMessage() {
+        String redirect = controller.cancelOrder(10L);
 
-        verify(orderService).deleteOrderById(10L);
-        assertEquals("redirect:/order/list?success=Order+berhasil+dihapus", redirect);
+        verify(orderService).cancelOrderById(10L);
+        assertEquals("redirect:/order/list?success=Order+berhasil+dibatalkan", redirect);
     }
 
     private Order sampleOrder(Long id) {
