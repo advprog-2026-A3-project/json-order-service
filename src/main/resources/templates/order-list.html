@@ -12,6 +12,15 @@
         <div>
             <h1>Order Dashboard</h1>
             <p class="subtitle">Kelola transaksi order dengan tampilan bersih dan cepat.</p>
+            <div class="viewer-switch">
+                <span class="viewer-label">Mode Dummy:</span>
+                <a class="btn btn-secondary"
+                   th:classappend="${isTitiperView} ? ' btn-primary' : ''"
+                   th:href="@{/order/list(viewer='titiper')}">Titiper</a>
+                <a class="btn btn-secondary"
+                   th:classappend="${isJastiperView} ? ' btn-primary' : ''"
+                   th:href="@{/order/list(viewer='jastiper')}">Jastiper</a>
+            </div>
         </div>
         <a class="btn btn-primary" th:href="@{/order/create}">+ New Order</a>
     </header>
@@ -31,6 +40,7 @@
                     <th>Total</th>
                     <th>Destination</th>
                     <th>Status</th>
+                    <th>Rating</th>
                     <th>Actions</th>
                 </tr>
                 </thead>
@@ -47,35 +57,59 @@
                     <td th:text="${order.shippingAddress}"></td>
                     <td><span class="status-pill" th:text="${order.status}"></span></td>
                     <td>
+                        <div th:if="${ratingsByOrderId.containsKey(order.id)}" class="rating-chip">
+                            <strong th:text="${ratingsByOrderId.get(order.id).ratingValue + '/5'}"></strong>
+                            <span th:text="${ratingsByOrderId.get(order.id).review}"></span>
+                        </div>
+                        <span th:if="${!ratingsByOrderId.containsKey(order.id)}" class="muted-text">Belum ada rating</span>
+                    </td>
+                    <td>
                         <div class="row-actions">
                             <a class="btn btn-secondary" th:href="@{/order/edit/{id}(id=${order.id})}">Edit</a>
 
-                            <form th:if="${order.status.name() == 'PENDING'}" th:action="@{/order/status/{id}(id=${order.id})}" method="post">
-                                <input type="hidden" name="status" value="PAID">
-                                <button class="btn btn-secondary" type="submit">Mark Paid</button>
-                            </form>
+                            <div th:if="${isJastiperView}">
+                                <form th:if="${order.status.name() == 'PENDING'}" th:action="@{/order/status/{id}(id=${order.id})}" method="post">
+                                    <input type="hidden" name="viewer" th:value="${viewer}">
+                                    <input type="hidden" name="status" value="PAID">
+                                    <button class="btn btn-secondary" type="submit">Mark Paid</button>
+                                </form>
 
-                            <form th:if="${order.status.name() == 'PAID'}" th:action="@{/order/status/{id}(id=${order.id})}" method="post">
-                                <input type="hidden" name="status" value="PURCHASED">
-                                <button class="btn btn-secondary" type="submit">Mark Purchased</button>
-                            </form>
+                                <form th:if="${order.status.name() == 'PAID'}" th:action="@{/order/status/{id}(id=${order.id})}" method="post">
+                                    <input type="hidden" name="viewer" th:value="${viewer}">
+                                    <input type="hidden" name="status" value="PURCHASED">
+                                    <button class="btn btn-secondary" type="submit">Mark Purchased</button>
+                                </form>
 
-                            <form th:if="${order.status.name() == 'PURCHASED'}" th:action="@{/order/status/{id}(id=${order.id})}" method="post">
-                                <input type="hidden" name="status" value="SHIPPED">
-                                <button class="btn btn-secondary" type="submit">Mark Shipped</button>
-                            </form>
+                                <form th:if="${order.status.name() == 'PURCHASED'}" th:action="@{/order/status/{id}(id=${order.id})}" method="post">
+                                    <input type="hidden" name="viewer" th:value="${viewer}">
+                                    <input type="hidden" name="status" value="SHIPPED">
+                                    <button class="btn btn-secondary" type="submit">Mark Shipped</button>
+                                </form>
 
-                            <form th:if="${order.status.name() == 'SHIPPED'}" th:action="@{/order/status/{id}(id=${order.id})}" method="post">
-                                <input type="hidden" name="status" value="COMPLETED">
-                                <button class="btn btn-secondary" type="submit">Mark Completed</button>
-                            </form>
+                                <form th:if="${order.status.name() == 'SHIPPED'}" th:action="@{/order/status/{id}(id=${order.id})}" method="post">
+                                    <input type="hidden" name="viewer" th:value="${viewer}">
+                                    <input type="hidden" name="status" value="COMPLETED">
+                                    <button class="btn btn-secondary" type="submit">Mark Completed</button>
+                                </form>
 
-                            <form class="js-cancel-form"
-                                  th:if="${order.status.name() == 'PENDING' || order.status.name() == 'PAID' || order.status.name() == 'PURCHASED'}"
-                                  th:action="@{/order/cancel/{id}(id=${order.id})}"
+                                <form class="js-cancel-form"
+                                      th:if="${order.status.name() == 'PENDING' || order.status.name() == 'PAID' || order.status.name() == 'PURCHASED'}"
+                                      th:action="@{/order/cancel/{id}(id=${order.id})}"
+                                      method="post"
+                                      th:attr="data-product=${order.productName}">
+                                    <input type="hidden" name="viewer" th:value="${viewer}">
+                                    <button class="btn btn-danger" type="submit">Cancel</button>
+                                </form>
+                            </div>
+
+                            <form th:if="${isTitiperView && order.status.name() == 'COMPLETED' && !ratingsByOrderId.containsKey(order.id)}"
+                                  th:action="@{/order/{id}/rating(id=${order.id})}"
                                   method="post"
-                                  th:attr="data-product=${order.productName}">
-                                <button class="btn btn-danger" type="submit">Cancel</button>
+                                  class="rating-form-inline">
+                                <input type="hidden" name="viewer" th:value="${viewer}">
+                                <input type="number" min="1" max="5" name="ratingValue" placeholder="1-5" required>
+                                <input type="text" name="review" placeholder="Review singkat">
+                                <button class="btn btn-primary" type="submit">Rate</button>
                             </form>
                         </div>
                     </td>
