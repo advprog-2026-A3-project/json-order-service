@@ -1,14 +1,25 @@
 package id.ac.ui.cs.advprog.order.config;
 
+import java.net.http.HttpClient;
+import java.time.Duration;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 @Configuration
 public class RestClientConfig {
 
     @Bean
-    public RestClient.Builder restClientBuilder() {
-        return RestClient.builder();
+    public RestClient.Builder restClientBuilder(
+            @Value("${voucher.client.connect-timeout-seconds:5}") int connectTimeoutSeconds,
+            @Value("${voucher.client.read-timeout-seconds:10}") int readTimeoutSeconds) {
+        HttpClient httpClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(connectTimeoutSeconds))
+                .build();
+        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
+        factory.setReadTimeout(Duration.ofSeconds(readTimeoutSeconds));
+        return RestClient.builder().requestFactory(factory);
     }
 }
