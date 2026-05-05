@@ -64,4 +64,14 @@ class GlobalExceptionHandlerTest {
         assertEquals(400, response.getStatus());
         assertEquals("subtotal must be a whole number", response.getMessage());
     }
+
+    @Test
+    void handleGenericException_returnsForbiddenWhenSelfPurchaseIsWrapped() {
+        GlobalExceptionHandler.ErrorResponse response = handler
+            .handleGenericException(new RuntimeException(new SelfPurchaseNotAllowedException()))
+            .getBody();
+
+        assertEquals(403, response.getStatus());
+        assertEquals("Jastiper tidak boleh membeli barang miliknya sendiri", response.getMessage());
+    }
 }

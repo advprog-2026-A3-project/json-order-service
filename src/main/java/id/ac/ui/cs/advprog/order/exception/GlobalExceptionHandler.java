@@ -161,6 +161,11 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericException(Exception ex) {
+        SelfPurchaseNotAllowedException selfPurchaseCause = findCause(ex, SelfPurchaseNotAllowedException.class);
+        if (selfPurchaseCause != null) {
+            return handleSelfPurchaseNotAllowed(selfPurchaseCause);
+        }
+
         log.error("Unexpected error: ", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(new ErrorResponse(
@@ -187,6 +192,17 @@ public class GlobalExceptionHandler {
         }
 
         return responseBody;
+    }
+
+    private <T extends Throwable> T findCause(Throwable throwable, Class<T> type) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (type.isInstance(current)) {
+                return type.cast(current);
+            }
+            current = current.getCause();
+        }
+        return null;
     }
 
     @Getter
