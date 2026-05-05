@@ -19,7 +19,9 @@ public class RestClientConfig {
             @Value("${voucher.client.connect-timeout-seconds:" + DEFAULT_CONNECT_TIMEOUT_SECONDS + "}") int connectTimeoutSeconds,
             @Value("${voucher.client.read-timeout-seconds:" + DEFAULT_READ_TIMEOUT_SECONDS + "}") int readTimeoutSeconds) {
         if (connectTimeoutSeconds <= 0 || readTimeoutSeconds <= 0) {
-            throw new IllegalArgumentException("Timeout values must be positive");
+            throw new IllegalArgumentException(
+                    "Timeout values must be positive: connectTimeoutSeconds=" + connectTimeoutSeconds
+                    + ", readTimeoutSeconds=" + readTimeoutSeconds);
         }
         HttpClient httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(connectTimeoutSeconds))
