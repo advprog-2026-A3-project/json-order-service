@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class OrderServiceTest {
 
@@ -47,6 +48,23 @@ class OrderServiceTest {
         assertEquals(1, request.getQuantity());
         assertEquals(new BigDecimal("399000"), request.getTotalPrice());
         assertEquals("Jakarta", request.getShippingAddress());
+    }
+
+    @Test
+    void copyToExisting_clearsCheckoutSnapshotFields() {
+        Order existing = new Order();
+        existing.setSubtotal(new BigDecimal("100000"));
+        existing.setDiscountAmount(new BigDecimal("10000"));
+        existing.setVoucherCode("DISC10");
+        existing.setTotalPrice(new BigDecimal("90000"));
+
+        OrderCreateRequest request = createRequest();
+        mapper.copyToExisting(request, existing);
+
+        assertNull(existing.getSubtotal());
+        assertNull(existing.getDiscountAmount());
+        assertNull(existing.getVoucherCode());
+        assertEquals(new BigDecimal("50000"), existing.getTotalPrice());
     }
 
     private OrderCreateRequest createRequest() {
