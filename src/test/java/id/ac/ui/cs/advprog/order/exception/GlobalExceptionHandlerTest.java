@@ -1,7 +1,7 @@
 package id.ac.ui.cs.advprog.order.exception;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-gimport static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.BeforeEach;
