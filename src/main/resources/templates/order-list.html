@@ -6,19 +6,19 @@
     <title>Order List</title>
     <link rel="stylesheet" th:href="@{/css/order.css}">
 </head>
-<body>
+<body th:classappend="${isJastiperView} ? 'viewer-jastiper' : 'viewer-titiper'">
 <main class="page">
     <header class="topbar">
         <div>
             <h1>Order Dashboard</h1>
-            <p class="subtitle">Kelola transaksi order dengan tampilan bersih dan cepat.</p>
+            <p class="subtitle">List Order Kamu</p>
             <div class="viewer-switch">
                 <span class="viewer-label">Mode Dummy:</span>
-                <a class="btn btn-secondary"
-                   th:classappend="${isTitiperView} ? ' btn-primary' : ''"
+                <a class="btn btn-secondary viewer-btn titiper-btn"
+                   th:classappend="${isTitiperView} ? ' is-active' : ''"
                    th:href="@{/order/list(viewer='titiper')}">Titiper</a>
-                <a class="btn btn-secondary"
-                   th:classappend="${isJastiperView} ? ' btn-primary' : ''"
+                <a class="btn btn-secondary viewer-btn jastiper-btn"
+                   th:classappend="${isJastiperView} ? ' is-active' : ''"
                    th:href="@{/order/list(viewer='jastiper')}">Jastiper</a>
             </div>
         </div>
