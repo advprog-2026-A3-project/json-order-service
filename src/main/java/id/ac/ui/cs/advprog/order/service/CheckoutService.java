@@ -11,6 +11,8 @@ import id.ac.ui.cs.advprog.order.repository.OrderRepository;
 import java.math.BigDecimal;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 public class CheckoutService {
@@ -45,7 +47,12 @@ public class CheckoutService {
         ));
 
         if (voucherCode != null) {
-            voucherClient.redeemVoucher(voucherCode, subtotal);
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    voucherClient.redeemVoucher(voucherCode, subtotal);
+                }
+            });
         }
 
         return new CheckoutResponse(

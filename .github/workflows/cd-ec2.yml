@@ -8,7 +8,7 @@ on:
 jobs:
   deploy:
     name: Deploy Docker app to EC2
-    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && (github.event.workflow_run.head_branch == 'main' || github.event.workflow_run.head_branch == 'deployment/aws-deploy') }}
     runs-on: ubuntu-22.04
 
     environment:
@@ -41,6 +41,7 @@ jobs:
               --name json-order-service \
               --restart unless-stopped \
               --env-file .env \
+              -e SPRING_PROFILES_ACTIVE=prod \
               -p 80:8080 \
               json-order-service
 

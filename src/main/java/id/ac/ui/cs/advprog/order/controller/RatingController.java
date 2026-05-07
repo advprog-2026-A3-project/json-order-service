@@ -1,16 +1,19 @@
 package id.ac.ui.cs.advprog.order.controller;
 
 import id.ac.ui.cs.advprog.order.dto.RatingCreateRequest;
+import id.ac.ui.cs.advprog.order.model.Rating;
 import id.ac.ui.cs.advprog.order.service.RatingService;
-import org.springframework.stereotype.Controller;
-import org.springframework.web.bind.annotation.ModelAttribute;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
-@Controller
-@RequestMapping("/order")
+@RestController
+@RequestMapping("/api/v1/orders")
 public class RatingController {
 
     private final RatingService ratingService;
@@ -20,13 +23,11 @@ public class RatingController {
     }
 
     @PostMapping("/{id}/rating")
-    public String createRating(
-            @PathVariable("id") Long orderId,
-            @ModelAttribute RatingCreateRequest request,
-            @RequestParam(value = "viewer", defaultValue = "titiper") String viewer
+    public ResponseEntity<Rating> createRating(
+        @PathVariable("id") Long orderId,
+        @Valid @RequestBody RatingCreateRequest request
     ) {
-        ratingService.createRating(orderId, request);
-        return "redirect:/order/list?viewer=" + viewer + "&success=Rating+berhasil+disimpan";
+        Rating rating = ratingService.createRating(orderId, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(rating);
     }
 }
-

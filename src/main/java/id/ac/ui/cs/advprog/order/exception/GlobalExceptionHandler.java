@@ -175,6 +175,39 @@ public class GlobalExceptionHandler {
                 ));
     }
 
+    @ExceptionHandler(InvalidOrderStatusTransitionException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidOrderStatusTransition(InvalidOrderStatusTransitionException ex) {
+        log.warn("Invalid order status transition: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorResponse(
+                        HttpStatus.BAD_REQUEST.value(),
+                        ex.getMessage(),
+                        LocalDateTime.now()
+                ));
+    }
+
+    @ExceptionHandler(RatingAlreadyExistsException.class)
+    public ResponseEntity<ErrorResponse> handleRatingAlreadyExists(RatingAlreadyExistsException ex) {
+        log.warn("Rating already exists: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ErrorResponse(
+                        HttpStatus.CONFLICT.value(),
+                        ex.getMessage(),
+                        LocalDateTime.now()
+                ));
+    }
+
+    @ExceptionHandler(RatingNotAllowedException.class)
+    public ResponseEntity<ErrorResponse> handleRatingNotAllowed(RatingNotAllowedException ex) {
+        log.warn("Rating not allowed: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorResponse(
+                        HttpStatus.BAD_REQUEST.value(),
+                        ex.getMessage(),
+                        LocalDateTime.now()
+                ));
+    }
+
     private String extractDownstreamMessage(RestClientResponseException ex) {
         String responseBody = ex.getResponseBodyAsString();
         if (responseBody == null || responseBody.isBlank()) {

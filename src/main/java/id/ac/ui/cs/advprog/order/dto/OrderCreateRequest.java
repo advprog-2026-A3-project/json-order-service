@@ -2,13 +2,34 @@ package id.ac.ui.cs.advprog.order.dto;
 
 import java.math.BigDecimal;
 
+import jakarta.validation.constraints.Digits;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+
 public class OrderCreateRequest {
+    @NotBlank
     private String productId;
+
+    @NotBlank
     private String productName;
+
+    @NotBlank
     private String titiperUserId;
+
+    @NotBlank
     private String jastiperUserId;
+
+    @NotNull
+    @Min(1)
     private Integer quantity;
+
+    @NotNull
+    @Min(0)
+    @Digits(integer = 17, fraction = 0)
     private BigDecimal totalPrice;
+
+    @NotBlank
     private String shippingAddress;
 
     public String getProductId() {
@@ -67,4 +88,3 @@ public class OrderCreateRequest {
         this.shippingAddress = shippingAddress;
     }
 }
-

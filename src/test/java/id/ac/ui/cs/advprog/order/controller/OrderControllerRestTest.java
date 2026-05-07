@@ -1,32 +1,28 @@
 package id.ac.ui.cs.advprog.order.controller;
 
 import id.ac.ui.cs.advprog.order.dto.OrderCreateRequest;
-import id.ac.ui.cs.advprog.order.exception.InvalidOrderStatusTransitionException;
+import id.ac.ui.cs.advprog.order.exception.GlobalExceptionHandler;
 import id.ac.ui.cs.advprog.order.exception.OrderNotFoundException;
-import id.ac.ui.cs.advprog.order.exception.SelfPurchaseNotAllowedException;
 import id.ac.ui.cs.advprog.order.model.Order;
 import id.ac.ui.cs.advprog.order.model.OrderStatus;
-import id.ac.ui.cs.advprog.order.service.OrderMapper;
 import id.ac.ui.cs.advprog.order.service.OrderService;
-import id.ac.ui.cs.advprog.order.service.RatingService;
+import java.math.BigDecimal;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-
-import java.math.BigDecimal;
-import java.util.Collections;
-import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
 
 class OrderControllerRestTest {
 
@@ -36,15 +32,14 @@ class OrderControllerRestTest {
     @BeforeEach
     void setUp() {
         orderService = mock(OrderService.class);
-        OrderMapper orderMapper = mock(OrderMapper.class);
-        RatingService ratingService = mock(RatingService.class);
-        OrderController controller = new OrderController(orderService, orderMapper, ratingService);
+        OrderController controller = new OrderController(orderService);
 
         Order order = new Order();
         order.setId(1L);
         order.setProductName("Item");
         order.setProductId("PROD-1");
         order.setTitiperUserId("titiper");
+        order.setJastiperUserId("jastiper");
         order.setQuantity(1);
         order.setTotalPrice(new BigDecimal("1000"));
         order.setShippingAddress("Depok");
@@ -52,92 +47,105 @@ class OrderControllerRestTest {
 
         when(orderService.getAllOrders()).thenReturn(List.of(order));
         when(orderService.getOrderById(1L)).thenReturn(order);
-        when(orderMapper.toRequest(order)).thenReturn(new OrderCreateRequest());
-        when(ratingService.getRatingsByOrderIds(List.of(1L))).thenReturn(Collections.emptyMap());
+        when(orderService.createOrder(any(OrderCreateRequest.class))).thenReturn(order);
+        when(orderService.updateOrder(any(Long.class), any(OrderCreateRequest.class))).thenReturn(order);
+        when(orderService.updateStatus(1L, OrderStatus.PAID)).thenReturn(order);
+        when(orderService.cancelOrderById(1L)).thenReturn(order);
 
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
-                .setControllerAdvice(new OrderExceptionHandler())
+                .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
 
     @Test
-    void getOrderList_returnsOrderListView() throws Exception {
-        mockMvc.perform(get("/order/list"))
+    void getOrderList_returnsOrders() throws Exception {
+        mockMvc.perform(get("/api/v1/orders"))
                 .andExpect(status().isOk())
-                .andExpect(view().name("order-list"))
-                .andExpect(model().attributeExists("orders"));
+                .andExpect(jsonPath("$[0].id").value(1));
     }
 
     @Test
-    void postCreate_redirectsToList() throws Exception {
-        mockMvc.perform(post("/order/create")
-                        .param("productId", "PROD-1")
-                        .param("productName", "Item")
-                        .param("titiperUserId", "titiper")
-                        .param("jastiperUserId", "jastiper")
-                        .param("quantity", "1")
-                        .param("totalPrice", "1000")
-                        .param("shippingAddress", "Depok"))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("/order/list?success=Order+berhasil+disimpan"));
+    void postCreate_returnsCreatedOrder() throws Exception {
+        mockMvc.perform(post("/api/v1/orders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                              "productId": "PROD-1",
+                              "productName": "Item",
+                              "titiperUserId": "titiper",
+                              "jastiperUserId": "jastiper",
+                              "quantity": 1,
+                              "totalPrice": 1000,
+                              "shippingAddress": "Depok"
+                            }
+                            """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(1));
     }
 
     @Test
-    void getEdit_returnsEditView() throws Exception {
-        mockMvc.perform(get("/order/edit/1"))
+    void getOrder_returnsOrder() throws Exception {
+        mockMvc.perform(get("/api/v1/orders/1"))
                 .andExpect(status().isOk())
-                .andExpect(view().name("edit-order"))
-                .andExpect(model().attributeExists("checkoutRequest"));
+                .andExpect(jsonPath("$.id").value(1));
     }
 
     @Test
-    void postStatus_redirectsToSuccessMessage() throws Exception {
-        mockMvc.perform(post("/order/status/1")
+    void putOrder_returnsUpdatedOrder() throws Exception {
+        mockMvc.perform(put("/api/v1/orders/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                              "productId": "PROD-1",
+                              "productName": "Item",
+                              "titiperUserId": "titiper",
+                              "jastiperUserId": "jastiper",
+                              "quantity": 2,
+                              "totalPrice": 2000,
+                              "shippingAddress": "Depok"
+                            }
+                            """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1));
+    }
+
+    @Test
+    void patchStatus_returnsUpdatedOrder() throws Exception {
+        mockMvc.perform(patch("/api/v1/orders/1/status")
                         .param("status", "PAID"))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("/order/list?viewer=jastiper&success=Status+order+berhasil+diupdate"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1));
     }
 
     @Test
-    void postCancel_redirectsToSuccessMessage() throws Exception {
-        mockMvc.perform(post("/order/cancel/1"))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("/order/list?viewer=jastiper&success=Order+berhasil+dibatalkan"));
+    void postCancel_returnsUpdatedOrder() throws Exception {
+        mockMvc.perform(post("/api/v1/orders/1/cancel"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1));
     }
 
     @Test
-    void getEdit_whenOrderMissing_redirectsToErrorPageViaAdvice() throws Exception {
+    void getOrder_whenMissing_returnsNotFound() throws Exception {
         when(orderService.getOrderById(99L)).thenThrow(new OrderNotFoundException(99L));
 
-        mockMvc.perform(get("/order/edit/99"))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("/order/list?error=Order+tidak+ditemukan"));
+        mockMvc.perform(get("/api/v1/orders/99"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404));
     }
 
     @Test
-    void postCancel_whenTransitionInvalid_redirectsToErrorPageViaAdvice() throws Exception {
-        when(orderService.cancelOrderById(1L))
-                .thenThrow(new InvalidOrderStatusTransitionException(OrderStatus.SHIPPED, OrderStatus.CANCELLED));
-
-        mockMvc.perform(post("/order/cancel/1"))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("/order/list?error=Transisi+status+order+tidak+valid"));
-    }
-
-    @Test
-    void postCreate_whenSelfPurchase_redirectsToErrorPageViaAdvice() throws Exception {
-        when(orderService.createOrder(any(OrderCreateRequest.class)))
-                .thenThrow(new SelfPurchaseNotAllowedException());
-
-        mockMvc.perform(post("/order/create")
-                        .param("productId", "PROD-1")
-                        .param("productName", "Item")
-                        .param("titiperUserId", "same-user")
-                        .param("jastiperUserId", "same-user")
-                        .param("quantity", "1")
-                        .param("totalPrice", "1000")
-                        .param("shippingAddress", "Depok"))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("/order/list?error=Jastiper+tidak+boleh+beli+barang+sendiri"));
+    void postCreate_whenInvalid_returnsBadRequest() throws Exception {
+        mockMvc.perform(post("/api/v1/orders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                              "productName": "Item",
+                              "quantity": 1,
+                              "totalPrice": 1000,
+                              "shippingAddress": "Depok"
+                            }
+                            """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.productId").exists());
     }
 }

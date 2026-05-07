@@ -15,7 +15,7 @@ public class VoucherClient {
 
     public VoucherClient(
         RestClient.Builder restClientBuilder,
-        @Value("${voucher.service.base-url:http://localhost:8080}") String voucherServiceBaseUrl
+        @Value("${voucher.service.base-url}") String voucherServiceBaseUrl
     ) {
         this.restClient = restClientBuilder
             .baseUrl(voucherServiceBaseUrl)
