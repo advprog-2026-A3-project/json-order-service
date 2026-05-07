@@ -66,6 +66,7 @@ tasks.withType<Test> {
 
 tasks.jacocoTestReport {
     dependsOn(tasks.test)
+
     reports {
         xml.required.set(true)
         csv.required.set(false)
@@ -74,10 +75,24 @@ tasks.jacocoTestReport {
 }
 
 tasks.jacocoTestCoverageVerification {
+    val jacocoExcludes = listOf(
+        "**/dto/**",
+        "**/model/**",
+        "**/exception/**",
+        "**/config/**",
+        "**/client/**",
+        "**/repository/**",
+        "**/OrderApplication*"
+    )
+
+    classDirectories.setFrom(
+        files(classDirectories.files.map { fileTree(it) { exclude(jacocoExcludes) } })
+    )
+
     violationRules {
         rule {
             limit {
-                minimum = 0.85.toBigDecimal()
+                minimum = 0.90.toBigDecimal()
             }
         }
     }

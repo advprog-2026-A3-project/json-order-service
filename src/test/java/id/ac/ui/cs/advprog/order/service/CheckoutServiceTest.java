@@ -19,12 +19,16 @@ import id.ac.ui.cs.advprog.order.model.Order;
 import id.ac.ui.cs.advprog.order.model.OrderStatus;
 import id.ac.ui.cs.advprog.order.repository.OrderRepository;
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.InOrder;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.client.RestClientResponseException;
 
 @ExtendWith(MockitoExtension.class)
@@ -91,17 +95,25 @@ class CheckoutServiceTest {
                 9
             ));
 
-        CheckoutResponse response = checkoutService.checkout(request);
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            CheckoutResponse response = checkoutService.checkout(request);
 
-        assertEquals(1L, response.orderId());
-        assertEquals(OrderStatus.PAID, response.status());
-        assertEquals("WELCOME20", response.voucherCode());
-        assertEquals(0, new BigDecimal("40000").compareTo(response.discountAmount()));
-        assertEquals(0, new BigDecimal("160000").compareTo(response.totalPaid()));
-        InOrder inOrder = inOrder(voucherClient, orderRepository);
-        inOrder.verify(voucherClient).validateVoucher("WELCOME20", new BigDecimal("200000"));
-        inOrder.verify(orderRepository).save(any(Order.class));
-        inOrder.verify(voucherClient).redeemVoucher("WELCOME20", new BigDecimal("200000"));
+            assertEquals(1L, response.orderId());
+            assertEquals(OrderStatus.PAID, response.status());
+            assertEquals("WELCOME20", response.voucherCode());
+            assertEquals(0, new BigDecimal("40000").compareTo(response.discountAmount()));
+            assertEquals(0, new BigDecimal("160000").compareTo(response.totalPaid()));
+
+            triggerAfterCommit();
+
+            InOrder inOrder = inOrder(voucherClient, orderRepository);
+            inOrder.verify(voucherClient).validateVoucher("WELCOME20", new BigDecimal("200000"));
+            inOrder.verify(orderRepository).save(any(Order.class));
+            inOrder.verify(voucherClient).redeemVoucher("WELCOME20", new BigDecimal("200000"));
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 
     @Test
@@ -121,17 +133,25 @@ class CheckoutServiceTest {
                 9
             ));
 
-        CheckoutResponse response = checkoutService.checkout(request);
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            CheckoutResponse response = checkoutService.checkout(request);
 
-        assertEquals("WELCOME20", response.voucherCode());
-        verify(voucherClient).validateVoucher("WELCOME20", new BigDecimal("200000"));
-        verify(orderRepository).save(argThat(order ->
-            "WELCOME20".equals(order.getVoucherCode())
-                && new BigDecimal("200000").compareTo(order.getSubtotal()) == 0
-                && new BigDecimal("40000").compareTo(order.getDiscountAmount()) == 0
-                && new BigDecimal("160000").compareTo(order.getTotalPrice()) == 0
-                && OrderStatus.PAID == order.getStatus()
-        ));
+            assertEquals("WELCOME20", response.voucherCode());
+            verify(voucherClient).validateVoucher("WELCOME20", new BigDecimal("200000"));
+            verify(orderRepository).save(argThat(order ->
+                "WELCOME20".equals(order.getVoucherCode())
+                    && new BigDecimal("200000").compareTo(order.getSubtotal()) == 0
+                    && new BigDecimal("40000").compareTo(order.getDiscountAmount()) == 0
+                    && new BigDecimal("160000").compareTo(order.getTotalPrice()) == 0
+                    && OrderStatus.PAID == order.getStatus()
+            ));
+
+            triggerAfterCommit();
+            verify(voucherClient).redeemVoucher("WELCOME20", new BigDecimal("200000"));
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 
     @Test
@@ -184,12 +204,28 @@ class CheckoutServiceTest {
         when(voucherClient.redeemVoucher("WELCOME20", new BigDecimal("200000")))
             .thenThrow(RestClientResponseException.class);
 
-        assertThrows(RestClientResponseException.class, () -> checkoutService.checkout(request));
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            CheckoutResponse response = checkoutService.checkout(request);
+            assertEquals(1L, response.orderId());
 
-        InOrder inOrder = inOrder(voucherClient, orderRepository);
-        inOrder.verify(voucherClient).validateVoucher("WELCOME20", new BigDecimal("200000"));
-        inOrder.verify(orderRepository).save(any(Order.class));
-        inOrder.verify(voucherClient).redeemVoucher("WELCOME20", new BigDecimal("200000"));
+            assertThrows(RestClientResponseException.class, this::triggerAfterCommit);
+
+            InOrder inOrder = inOrder(voucherClient, orderRepository);
+            inOrder.verify(voucherClient).validateVoucher("WELCOME20", new BigDecimal("200000"));
+            inOrder.verify(orderRepository).save(any(Order.class));
+            inOrder.verify(voucherClient).redeemVoucher("WELCOME20", new BigDecimal("200000"));
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    private void triggerAfterCommit() {
+        List<TransactionSynchronization> synchronizations =
+            new ArrayList<>(TransactionSynchronizationManager.getSynchronizations());
+        for (TransactionSynchronization synchronization : synchronizations) {
+            synchronization.afterCommit();
+        }
     }
 
     private void stubOrderSave() {
@@ -200,3 +236,4 @@ class CheckoutServiceTest {
         });
     }
 }
+
