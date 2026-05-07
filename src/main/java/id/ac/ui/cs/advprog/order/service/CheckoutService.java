@@ -60,8 +60,9 @@ public class CheckoutService {
                         voucherClient.redeemVoucher(voucherCode, subtotal);
                         savedOrder.setStatus(OrderStatus.PAID);
                         orderRepository.save(savedOrder);
-                    } catch (Exception ex) {
+                    } catch (RuntimeException ex) {
                         LOGGER.error("Voucher redemption failed for order {} and voucher {}", savedOrder.getId(), voucherCode, ex);
+                        throw ex;
                     }
                 }
             });
