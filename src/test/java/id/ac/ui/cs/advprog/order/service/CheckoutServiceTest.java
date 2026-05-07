@@ -100,7 +100,7 @@ class CheckoutServiceTest {
             CheckoutResponse response = checkoutService.checkout(request);
 
             assertEquals(1L, response.orderId());
-            assertEquals(OrderStatus.PAID, response.status());
+            assertEquals(OrderStatus.CHECKOUT_PENDING, response.status());
             assertEquals("WELCOME20", response.voucherCode());
             assertEquals(0, new BigDecimal("40000").compareTo(response.discountAmount()));
             assertEquals(0, new BigDecimal("160000").compareTo(response.totalPaid()));
@@ -111,6 +111,7 @@ class CheckoutServiceTest {
             inOrder.verify(voucherClient).validateVoucher("WELCOME20", new BigDecimal("200000"));
             inOrder.verify(orderRepository).save(any(Order.class));
             inOrder.verify(voucherClient).redeemVoucher("WELCOME20", new BigDecimal("200000"));
+            inOrder.verify(orderRepository).save(any(Order.class));
         } finally {
             TransactionSynchronizationManager.clearSynchronization();
         }
@@ -138,17 +139,19 @@ class CheckoutServiceTest {
             CheckoutResponse response = checkoutService.checkout(request);
 
             assertEquals("WELCOME20", response.voucherCode());
+            assertEquals(OrderStatus.CHECKOUT_PENDING, response.status());
             verify(voucherClient).validateVoucher("WELCOME20", new BigDecimal("200000"));
             verify(orderRepository).save(argThat(order ->
                 "WELCOME20".equals(order.getVoucherCode())
                     && new BigDecimal("200000").compareTo(order.getSubtotal()) == 0
                     && new BigDecimal("40000").compareTo(order.getDiscountAmount()) == 0
                     && new BigDecimal("160000").compareTo(order.getTotalPrice()) == 0
-                    && OrderStatus.PAID == order.getStatus()
+                    && OrderStatus.CHECKOUT_PENDING == order.getStatus()
             ));
 
             triggerAfterCommit();
             verify(voucherClient).redeemVoucher("WELCOME20", new BigDecimal("200000"));
+            verify(orderRepository, org.mockito.Mockito.atLeast(2)).save(any(Order.class));
         } finally {
             TransactionSynchronizationManager.clearSynchronization();
         }
@@ -208,6 +211,7 @@ class CheckoutServiceTest {
         try {
             CheckoutResponse response = checkoutService.checkout(request);
             assertEquals(1L, response.orderId());
+            assertEquals(OrderStatus.CHECKOUT_PENDING, response.status());
 
             assertThrows(RestClientResponseException.class, this::triggerAfterCommit);
 

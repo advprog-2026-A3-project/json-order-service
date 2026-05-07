@@ -87,7 +87,8 @@ public class OrderServiceImpl implements OrderService {
             return true;
         }
         return switch (current) {
-            case PENDING -> next == OrderStatus.PAID || next == OrderStatus.CANCELLED;
+            case PENDING -> next == OrderStatus.PAID || next == OrderStatus.CANCELLED || next == OrderStatus.CHECKOUT_PENDING;
+            case CHECKOUT_PENDING -> next == OrderStatus.PAID || next == OrderStatus.CANCELLED;
             case PAID -> next == OrderStatus.PURCHASED || next == OrderStatus.CANCELLED;
             case PURCHASED -> next == OrderStatus.SHIPPED || next == OrderStatus.CANCELLED;
             case SHIPPED -> next == OrderStatus.COMPLETED;
@@ -97,6 +98,7 @@ public class OrderServiceImpl implements OrderService {
 
     private boolean canCancel(OrderStatus currentStatus) {
         return currentStatus == OrderStatus.PENDING
+                || currentStatus == OrderStatus.CHECKOUT_PENDING
                 || currentStatus == OrderStatus.PAID
                 || currentStatus == OrderStatus.PURCHASED;
     }

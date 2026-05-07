@@ -9,6 +9,8 @@ import id.ac.ui.cs.advprog.order.model.Order;
 import id.ac.ui.cs.advprog.order.model.OrderStatus;
 import id.ac.ui.cs.advprog.order.repository.OrderRepository;
 import java.math.BigDecimal;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -16,6 +18,8 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 @Service
 public class CheckoutService {
+    private static final Logger LOGGER = LoggerFactory.getLogger(CheckoutService.class);
+
     private final VoucherClient voucherClient;
     private final OrderRepository orderRepository;
 
@@ -38,26 +42,34 @@ public class CheckoutService {
         }
 
         BigDecimal totalPaid = subtotal.subtract(discountAmount);
-        Order savedOrder = orderRepository.save(buildPaidOrder(
+        OrderStatus initialStatus = voucherCode == null ? OrderStatus.PAID : OrderStatus.CHECKOUT_PENDING;
+        Order savedOrder = orderRepository.save(buildOrder(
             request,
             voucherCode,
             subtotal,
             discountAmount,
-            totalPaid
+            totalPaid,
+            initialStatus
         ));
 
         if (voucherCode != null) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    voucherClient.redeemVoucher(voucherCode, subtotal);
+                    try {
+                        voucherClient.redeemVoucher(voucherCode, subtotal);
+                        savedOrder.setStatus(OrderStatus.PAID);
+                        orderRepository.save(savedOrder);
+                    } catch (Exception ex) {
+                        LOGGER.error("Voucher redemption failed for order {} and voucher {}", savedOrder.getId(), voucherCode, ex);
+                    }
                 }
             });
         }
 
         return new CheckoutResponse(
             savedOrder.getId(),
-            OrderStatus.PAID,
+            initialStatus,
             voucherCode,
             subtotal,
             discountAmount,
@@ -65,12 +77,13 @@ public class CheckoutService {
         );
     }
 
-    private Order buildPaidOrder(
+    private Order buildOrder(
         CheckoutRequest request,
         String voucherCode,
         BigDecimal subtotal,
         BigDecimal discountAmount,
-        BigDecimal totalPaid
+        BigDecimal totalPaid,
+        OrderStatus status
     ) {
         Order order = new Order();
         order.setProductId(request.getProductId());
@@ -83,7 +96,7 @@ public class CheckoutService {
         order.setSubtotal(subtotal);
         order.setDiscountAmount(discountAmount);
         order.setTotalPrice(totalPaid);
-        order.setStatus(OrderStatus.PAID);
+        order.setStatus(status);
         return order;
     }
 
