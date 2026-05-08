@@ -23,6 +23,10 @@ public class OrderMapperImpl implements OrderMapper {
         target.setQuantity(request.getQuantity());
         target.setTotalPrice(request.getTotalPrice());
         target.setShippingAddress(request.getShippingAddress());
+        // Clear checkout-derived snapshot fields so they stay consistent with totalPrice
+        target.setSubtotal(null);
+        target.setDiscountAmount(null);
+        target.setVoucherCode(null);
     }
 
     @Override

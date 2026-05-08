@@ -3,20 +3,15 @@ package id.ac.ui.cs.advprog.order.controller;
 import id.ac.ui.cs.advprog.order.dto.OrderCreateRequest;
 import id.ac.ui.cs.advprog.order.model.Order;
 import id.ac.ui.cs.advprog.order.model.OrderStatus;
-import id.ac.ui.cs.advprog.order.service.OrderMapper;
 import id.ac.ui.cs.advprog.order.service.OrderService;
-import id.ac.ui.cs.advprog.order.service.RatingService;
+import java.math.BigDecimal;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.ui.ExtendedModelMap;
-import org.springframework.ui.Model;
-
-import java.math.BigDecimal;
-import java.util.Collections;
-import java.util.List;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -25,86 +20,82 @@ import static org.mockito.Mockito.when;
 class OrderControllerTest {
 
     private OrderService orderService;
-    private OrderMapper orderMapper;
-    private RatingService ratingService;
     private OrderController controller;
 
     @BeforeEach
     void setUp() {
         orderService = mock(OrderService.class);
-        orderMapper = mock(OrderMapper.class);
-        ratingService = mock(RatingService.class);
-        controller = new OrderController(orderService, orderMapper, ratingService);
+        controller = new OrderController(orderService);
     }
 
     @Test
-    void createOrderPage_returnsTemplateAndFormObject() {
-        Model model = new ExtendedModelMap();
-
-        String view = controller.createOrderPage(model);
-
-        assertEquals("create-order", view);
-        assertNotNull(model.getAttribute("checkoutRequest"));
-        assertInstanceOf(OrderCreateRequest.class, model.getAttribute("checkoutRequest"));
-    }
-
-    @Test
-    void createOrder_redirectsToListWithSuccessMessage() {
+    void createOrder_returnsCreatedResponse() {
         OrderCreateRequest request = new OrderCreateRequest();
+        Order order = sampleOrder(1L);
+        when(orderService.createOrder(request)).thenReturn(order);
 
-        String redirect = controller.createOrder(request);
+        ResponseEntity<Order> response = controller.createOrder(request);
 
         verify(orderService).createOrder(request);
-        assertEquals("redirect:/order/list?success=Order+berhasil+disimpan", redirect);
+        assertEquals(HttpStatus.CREATED, response.getStatusCode());
+        assertEquals(order, response.getBody());
     }
 
     @Test
-    void orderList_populatesOrdersRatingsAndViewerFlags() {
-        Model model = new ExtendedModelMap();
+    void getAllOrders_returnsOrders() {
         Order order = sampleOrder(1L);
         when(orderService.getAllOrders()).thenReturn(List.of(order));
-        when(ratingService.getRatingsByOrderIds(List.of(1L))).thenReturn(Collections.emptyMap());
 
-        String view = controller.orderList("ok", null, "titiper", model);
+        ResponseEntity<List<Order>> response = controller.getAllOrders();
 
-        assertEquals("order-list", view);
-        assertEquals("ok", model.getAttribute("successMessage"));
-        assertEquals("titiper", model.getAttribute("viewer"));
-        assertEquals(true, model.getAttribute("isTitiperView"));
-        assertEquals(1, ((List<?>) model.getAttribute("orders")).size());
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals(1, response.getBody().size());
     }
 
     @Test
-    void editOrderPage_returnsEditTemplateForExistingOrder() {
-        Model model = new ExtendedModelMap();
+    void getOrderById_returnsOrder() {
         Order order = sampleOrder(2L);
-        OrderCreateRequest request = new OrderCreateRequest();
-
         when(orderService.getOrderById(2L)).thenReturn(order);
-        when(orderMapper.toRequest(order)).thenReturn(request);
 
-        String view = controller.editOrderPage(2L, model);
+        ResponseEntity<Order> response = controller.getOrderById(2L);
 
-        assertEquals("edit-order", view);
-        assertEquals(2L, model.getAttribute("orderId"));
-        assertEquals(request, model.getAttribute("checkoutRequest"));
-        assertEquals(OrderStatus.PENDING, model.getAttribute("status"));
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(order, response.getBody());
     }
 
     @Test
-    void updateOrderStatus_redirectsWithSuccessMessageAndViewer() {
-        String redirect = controller.updateOrderStatus(10L, OrderStatus.PAID, "jastiper");
+    void updateOrder_returnsUpdatedOrder() {
+        OrderCreateRequest request = new OrderCreateRequest();
+        Order order = sampleOrder(3L);
+        when(orderService.updateOrder(3L, request)).thenReturn(order);
 
-        verify(orderService).updateStatus(10L, OrderStatus.PAID);
-        assertEquals("redirect:/order/list?viewer=jastiper&success=Status+order+berhasil+diupdate", redirect);
+        ResponseEntity<Order> response = controller.updateOrder(3L, request);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(order, response.getBody());
     }
 
     @Test
-    void cancelOrder_redirectsWithSuccessMessageAndViewer() {
-        String redirect = controller.cancelOrder(10L, "jastiper");
+    void updateOrderStatus_returnsUpdatedOrder() {
+        Order order = sampleOrder(4L);
+        when(orderService.updateStatus(4L, OrderStatus.PAID)).thenReturn(order);
 
-        verify(orderService).cancelOrderById(10L);
-        assertEquals("redirect:/order/list?viewer=jastiper&success=Order+berhasil+dibatalkan", redirect);
+        ResponseEntity<Order> response = controller.updateOrderStatus(4L, OrderStatus.PAID);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(order, response.getBody());
+    }
+
+    @Test
+    void cancelOrder_returnsUpdatedOrder() {
+        Order order = sampleOrder(5L);
+        when(orderService.cancelOrderById(5L)).thenReturn(order);
+
+        ResponseEntity<Order> response = controller.cancelOrder(5L);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(order, response.getBody());
     }
 
     private Order sampleOrder(Long id) {

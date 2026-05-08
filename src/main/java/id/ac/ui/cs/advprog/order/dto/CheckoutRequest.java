@@ -1,13 +1,12 @@
 package id.ac.ui.cs.advprog.order.dto;
 
-import java.math.BigDecimal;
-
-import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Digits;
+import java.math.BigDecimal;
 
-public class OrderCreateRequest {
+public class CheckoutRequest {
     @NotBlank
     private String productId;
 
@@ -27,10 +26,12 @@ public class OrderCreateRequest {
     @NotNull
     @Min(0)
     @Digits(integer = 17, fraction = 0)
-    private BigDecimal totalPrice;
+    private BigDecimal subtotal;
 
     @NotBlank
     private String shippingAddress;
+
+    private String voucherCode;
 
     public String getProductId() {
         return productId;
@@ -72,12 +73,12 @@ public class OrderCreateRequest {
         this.quantity = quantity;
     }
 
-    public BigDecimal getTotalPrice() {
-        return totalPrice;
+    public BigDecimal getSubtotal() {
+        return subtotal;
     }
 
-    public void setTotalPrice(BigDecimal totalPrice) {
-        this.totalPrice = totalPrice;
+    public void setSubtotal(BigDecimal subtotal) {
+        this.subtotal = subtotal;
     }
 
     public String getShippingAddress() {
@@ -86,5 +87,13 @@ public class OrderCreateRequest {
 
     public void setShippingAddress(String shippingAddress) {
         this.shippingAddress = shippingAddress;
+    }
+
+    public String getVoucherCode() {
+        return voucherCode;
+    }
+
+    public void setVoucherCode(String voucherCode) {
+        this.voucherCode = voucherCode;
     }
 }

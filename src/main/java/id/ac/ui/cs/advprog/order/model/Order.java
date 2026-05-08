@@ -43,6 +43,15 @@ public class Order {
     @Column(name = "total_price")
     private BigDecimal totalPrice;
 
+    @Column(name = "voucher_code")
+    private String voucherCode;
+
+    @Column(name = "subtotal")
+    private BigDecimal subtotal;
+
+    @Column(name = "discount_amount")
+    private BigDecimal discountAmount;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
     private OrderStatus status;
@@ -115,6 +124,30 @@ public class Order {
 
     public void setTotalPrice(BigDecimal totalPrice) {
         this.totalPrice = totalPrice;
+    }
+
+    public String getVoucherCode() {
+        return voucherCode;
+    }
+
+    public void setVoucherCode(String voucherCode) {
+        this.voucherCode = voucherCode;
+    }
+
+    public BigDecimal getSubtotal() {
+        return subtotal;
+    }
+
+    public void setSubtotal(BigDecimal subtotal) {
+        this.subtotal = subtotal;
+    }
+
+    public BigDecimal getDiscountAmount() {
+        return discountAmount;
+    }
+
+    public void setDiscountAmount(BigDecimal discountAmount) {
+        this.discountAmount = discountAmount;
     }
 
     public OrderStatus getStatus() {

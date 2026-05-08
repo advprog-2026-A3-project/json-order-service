@@ -6,6 +6,10 @@
     --line: #d2d2d7;
     --primary: #0071e3;
     --primary-hover: #005bb5;
+    --titiper: #0071e3;
+    --titiper-soft: #e6f1ff;
+    --jastiper: #12b76a;
+    --jastiper-soft: #ecfdf3;
     --danger: #b42318;
     --danger-bg: #fef3f2;
     --success-bg: #ecfdf3;
@@ -210,9 +214,36 @@ tr:hover td {
     align-items: center;
 }
 
-.viewer-label {
-    color: var(--muted);
-    font-size: 0.86rem;
+.viewer-btn {
+    border: 1px solid transparent;
+}
+
+.viewer-btn.is-active {
+    color: #fff;
+}
+
+.viewer-titiper .titiper-btn.is-active {
+    background: var(--titiper);
+    border-color: var(--titiper);
+    box-shadow: 0 6px 18px rgba(0, 113, 227, 0.2);
+}
+
+.viewer-titiper .jastiper-btn {
+    background: var(--jastiper-soft);
+    color: #0b7a4b;
+    border-color: #a6f4c5;
+}
+
+.viewer-jastiper .jastiper-btn.is-active {
+    background: var(--jastiper);
+    border-color: var(--jastiper);
+    box-shadow: 0 6px 18px rgba(18, 183, 106, 0.2);
+}
+
+.viewer-jastiper .titiper-btn {
+    background: var(--titiper-soft);
+    color: #175cd3;
+    border-color: #c7d7fe;
 }
 
 .muted-text {
