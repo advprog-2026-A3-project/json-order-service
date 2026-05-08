@@ -22,6 +22,8 @@ public class OrderServiceImpl implements OrderService {
 
     private final OrderRepository orderRepository;
     private final OrderMapper orderMapper;
+
+    // BARU(Order - Inventory): 1. Menambahkan InventoryClient untuk fetch product dari Inventory Service
     private final InventoryClient inventoryClient;
 
     public OrderServiceImpl(
@@ -31,13 +33,17 @@ public class OrderServiceImpl implements OrderService {
     ) {
         this.orderRepository = orderRepository;
         this.orderMapper = orderMapper;
+
+        // BARU(Order - Inventory): 2. Inject InventoryClient melalui constructor
         this.inventoryClient = inventoryClient;
     }
 
     @Override
     @Transactional
     public Order createOrder(OrderCreateRequest request) {
+        // BARU(Order - Inventory): 3. Ambil dan override data product dari Inventory sebelum order dibuat
         enrichRequestWithInventoryProductData(request);
+
         validateNotSelfPurchase(request);
 
         Order order = orderMapper.toEntity(request);
@@ -69,7 +75,9 @@ public class OrderServiceImpl implements OrderService {
             );
         }
 
+        // BARU(Order - Inventory): 4. Saat update order, data product juga tetap diambil dari Inventory
         enrichRequestWithInventoryProductData(request);
+
         validateNotSelfPurchase(request);
 
         orderMapper.copyToExisting(request, existingOrder);
@@ -110,6 +118,7 @@ public class OrderServiceImpl implements OrderService {
         return orderRepository.save(existingOrder);
     }
 
+    // BARU(Order - Inventory): 5. Fetch product, validasi stok, lalu override productName, jastiperUserId, dan totalPrice
     private void enrichRequestWithInventoryProductData(OrderCreateRequest request) {
         InventoryProductResponse product =
                 inventoryClient.getProductById(request.getProductId());
@@ -124,6 +133,7 @@ public class OrderServiceImpl implements OrderService {
         request.setTotalPrice(totalPrice);
     }
 
+    // BARU(Order - Inventory): 6. Validasi quantity dan stok berdasarkan data Inventory
     private void validateStock(InventoryProductResponse product, Integer quantity) {
         if (quantity == null || quantity < 1) {
             throw new ResponseStatusException(

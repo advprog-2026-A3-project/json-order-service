@@ -28,6 +28,8 @@ public class CheckoutService {
 
     private final VoucherClient voucherClient;
     private final OrderRepository orderRepository;
+
+    // BARU(Order - Inventory): 1. Menambahkan InventoryClient untuk komunikasi ke Inventory Service
     private final InventoryClient inventoryClient;
 
     public CheckoutService(
@@ -37,19 +39,25 @@ public class CheckoutService {
     ) {
         this.voucherClient = voucherClient;
         this.orderRepository = orderRepository;
+
+        // BARU(Order - Inventory): 2. Inject InventoryClient melalui constructor
         this.inventoryClient = inventoryClient;
     }
 
     @Transactional
     public CheckoutResponse checkout(CheckoutRequest request) {
+        // BARU(Order - Inventory): 3. Fetch Product dari Inventory Service berdasarkan productId
         InventoryProductResponse product =
                 inventoryClient.getProductById(request.getProductId());
 
+        // BARU(Order - Inventory): 4. Validasi stok product dari Inventory sebelum checkout
         validateStock(product, request.getQuantity());
 
+        // BARU(Order - Inventory): 5. Hitung subtotal dari harga Inventory dikali quantity
         BigDecimal subtotal = product.getHarga()
                 .multiply(BigDecimal.valueOf(request.getQuantity()));
 
+        // BARU(Order - Inventory): 6. Override data product dari request FE dengan data resmi dari Inventory
         request.setProductName(product.getNama());
         request.setJastiperUserId(product.getJastiperId());
         request.setSubtotal(subtotal);
@@ -62,6 +70,7 @@ public class CheckoutService {
         if (voucherCode != null) {
             VoucherValidateResponse voucherResponse =
                     voucherClient.validateVoucher(voucherCode, subtotal);
+
             discountAmount = voucherResponse.discountAmount();
         }
 
@@ -80,6 +89,21 @@ public class CheckoutService {
                 initialStatus
         ));
 
+        if (voucherCode == null) {
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            // BARU(Order - Inventory): 7. Mengurangi stok Inventory setelah checkout tanpa voucher berhasil
+                            inventoryClient.reduceProductStock(
+                                    request.getProductId(),
+                                    request.getQuantity()
+                            );
+                        }
+                    }
+            );
+        }
+
         if (voucherCode != null) {
             TransactionSynchronizationManager.registerSynchronization(
                     new TransactionSynchronization() {
@@ -87,6 +111,13 @@ public class CheckoutService {
                         public void afterCommit() {
                             try {
                                 voucherClient.redeemVoucher(voucherCode, subtotal);
+
+                                // BARU(Order - Inventory): 8. Mengurangi stok Inventory setelah voucher berhasil diredeem
+                                inventoryClient.reduceProductStock(
+                                        request.getProductId(),
+                                        request.getQuantity()
+                                );
+
                                 savedOrder.setStatus(OrderStatus.PAID);
                                 orderRepository.save(savedOrder);
                             } catch (RuntimeException ex) {
@@ -122,6 +153,7 @@ public class CheckoutService {
             OrderStatus status
     ) {
         Order order = new Order();
+
         order.setProductId(request.getProductId());
         order.setProductName(request.getProductName());
         order.setTitiperUserId(request.getTitiperUserId());
@@ -137,6 +169,7 @@ public class CheckoutService {
         return order;
     }
 
+    // BARU(Order - Inventory): 9. Method validasi quantity dan stok berdasarkan data Inventory
     private void validateStock(InventoryProductResponse product, Integer quantity) {
         if (quantity == null || quantity < 1) {
             throw new ResponseStatusException(
