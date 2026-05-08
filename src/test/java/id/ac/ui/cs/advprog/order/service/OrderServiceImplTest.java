@@ -1,6 +1,8 @@
 package id.ac.ui.cs.advprog.order.service;
 
+import id.ac.ui.cs.advprog.order.client.InventoryClient;
 import id.ac.ui.cs.advprog.order.dto.OrderCreateRequest;
+import id.ac.ui.cs.advprog.order.dto.inventory.InventoryProductResponse;
 import id.ac.ui.cs.advprog.order.exception.InvalidOrderStatusTransitionException;
 import id.ac.ui.cs.advprog.order.exception.OrderNotFoundException;
 import id.ac.ui.cs.advprog.order.exception.SelfPurchaseNotAllowedException;
@@ -21,6 +23,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -34,11 +37,15 @@ class OrderServiceImplTest {
     @Mock
     private OrderMapper orderMapper;
 
+    @Mock
+    private InventoryClient inventoryClient;
+
     @InjectMocks
     private OrderServiceImpl orderService;
 
     private OrderCreateRequest request;
     private Order order;
+    private InventoryProductResponse product;
 
     @BeforeEach
     void setUp() {
@@ -55,6 +62,15 @@ class OrderServiceImplTest {
         order.setId(1L);
         order.setProductId("PROD-001");
         order.setStatus(OrderStatus.PENDING);
+
+        product = new InventoryProductResponse();
+        product.setId("PROD-001");
+        product.setNama("Inventory Product");
+        product.setHarga(new BigDecimal("60000"));
+        product.setStok(10);
+        product.setJastiperId("jastiper-2");
+
+        lenient().when(inventoryClient.getProductById("PROD-001")).thenReturn(product);
     }
 
     @Test
@@ -241,7 +257,7 @@ class OrderServiceImplTest {
     @Test
     void createOrder_throwsWhenTitiperEqualsJastiper() {
         request.setTitiperUserId("same-user");
-        request.setJastiperUserId("same-user");
+        product.setJastiperId("same-user");
 
         assertThrows(SelfPurchaseNotAllowedException.class, () -> orderService.createOrder(request));
         verify(orderRepository, never()).save(order);
@@ -250,10 +266,58 @@ class OrderServiceImplTest {
     @Test
     void updateOrder_throwsWhenTitiperEqualsJastiper() {
         request.setTitiperUserId("same-user");
-        request.setJastiperUserId("same-user");
+        product.setJastiperId("same-user");
         when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
 
         assertThrows(SelfPurchaseNotAllowedException.class, () -> orderService.updateOrder(1L, request));
         verify(orderRepository, never()).save(order);
+    }
+
+    @Test
+    void updateStatus_allowsPendingToCheckoutPending() {
+        order.setStatus(OrderStatus.PENDING);
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(order)).thenReturn(order);
+
+        Order result = orderService.updateStatus(1L, OrderStatus.CHECKOUT_PENDING);
+
+        assertEquals(OrderStatus.CHECKOUT_PENDING, result.getStatus());
+        verify(orderRepository).save(order);
+    }
+
+    @Test
+    void updateStatus_allowsCheckoutPendingToPaid() {
+        order.setStatus(OrderStatus.CHECKOUT_PENDING);
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(order)).thenReturn(order);
+
+        Order result = orderService.updateStatus(1L, OrderStatus.PAID);
+
+        assertEquals(OrderStatus.PAID, result.getStatus());
+        verify(orderRepository).save(order);
+    }
+
+    @Test
+    void updateStatus_allowsCheckoutPendingToCancelled() {
+        order.setStatus(OrderStatus.CHECKOUT_PENDING);
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(order)).thenReturn(order);
+
+        Order result = orderService.updateStatus(1L, OrderStatus.CANCELLED);
+
+        assertEquals(OrderStatus.CANCELLED, result.getStatus());
+        verify(orderRepository).save(order);
+    }
+
+    @Test
+    void updateStatus_allowsPurchasedToCancelled() {
+        order.setStatus(OrderStatus.PURCHASED);
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(order)).thenReturn(order);
+
+        Order result = orderService.updateStatus(1L, OrderStatus.CANCELLED);
+
+        assertEquals(OrderStatus.CANCELLED, result.getStatus());
+        verify(orderRepository).save(order);
     }
 }

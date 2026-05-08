@@ -49,7 +49,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build and test (with JaCoCo report)
-        run: ./gradlew --no-daemon clean test jacocoTestReport jacocoTestCoverageVerification --stacktrace
+        run: ./gradlew --no-daemon clean test jacocoTestReport jacocoTestCoverageVerification -PjacocoMinimum=0.85 --stacktrace
 
       - name: SonarCloud analysis
         id: sonar_scan
