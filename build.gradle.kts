@@ -85,6 +85,10 @@ tasks.jacocoTestCoverageVerification {
         "**/OrderApplication*"
     )
 
+    val jacocoMinimum = (project.findProperty("jacocoMinimum") as String?)
+        ?.toBigDecimal()
+        ?: 0.90.toBigDecimal()
+
     classDirectories.setFrom(
         files(classDirectories.files.map { fileTree(it) { exclude(jacocoExcludes) } })
     )
@@ -92,7 +96,7 @@ tasks.jacocoTestCoverageVerification {
     violationRules {
         rule {
             limit {
-                minimum = 0.90.toBigDecimal()
+                minimum = jacocoMinimum
             }
         }
     }

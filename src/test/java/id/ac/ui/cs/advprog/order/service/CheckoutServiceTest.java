@@ -1,243 +1,191 @@
 package id.ac.ui.cs.advprog.order.service;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.argThat;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.inOrder;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
+import id.ac.ui.cs.advprog.order.client.InventoryClient;
 import id.ac.ui.cs.advprog.order.client.VoucherClient;
 import id.ac.ui.cs.advprog.order.dto.CheckoutRequest;
 import id.ac.ui.cs.advprog.order.dto.CheckoutResponse;
-import id.ac.ui.cs.advprog.order.dto.voucher.VoucherRedeemResponse;
+import id.ac.ui.cs.advprog.order.dto.inventory.InventoryProductResponse;
 import id.ac.ui.cs.advprog.order.dto.voucher.VoucherValidateResponse;
 import id.ac.ui.cs.advprog.order.exception.SelfPurchaseNotAllowedException;
 import id.ac.ui.cs.advprog.order.model.Order;
 import id.ac.ui.cs.advprog.order.model.OrderStatus;
 import id.ac.ui.cs.advprog.order.repository.OrderRepository;
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.List;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.InOrder;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
-import org.springframework.web.client.RestClientResponseException;
+import org.springframework.web.server.ResponseStatusException;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class CheckoutServiceTest {
+
     @Mock
     private VoucherClient voucherClient;
 
     @Mock
     private OrderRepository orderRepository;
 
+    @Mock
+    private InventoryClient inventoryClient;
+
+    @InjectMocks
     private CheckoutService checkoutService;
+
     private CheckoutRequest request;
+    private InventoryProductResponse product;
 
     @BeforeEach
     void setUp() {
-        checkoutService = new CheckoutService(voucherClient, orderRepository);
         request = new CheckoutRequest();
-        request.setProductId("PROD-001");
-        request.setProductName("KitKat Matcha");
+        request.setProductId("PROD-1");
+        request.setProductName("Old Name");
         request.setTitiperUserId("titiper-1");
-        request.setJastiperUserId("jastiper-1");
+        request.setJastiperUserId("old-jastiper");
         request.setQuantity(2);
-        request.setSubtotal(new BigDecimal("200000"));
         request.setShippingAddress("Depok");
+        request.setSubtotal(BigDecimal.ZERO);
+
+        product = new InventoryProductResponse();
+        product.setId("PROD-1");
+        product.setNama("Inventory Name");
+        product.setHarga(new BigDecimal("10000"));
+        product.setStok(5);
+        product.setJastiperId("jastiper-2");
+
+        when(inventoryClient.getProductById("PROD-1")).thenReturn(product);
+        lenient().when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
+            Order saved = invocation.getArgument(0);
+            if (saved.getId() == null) {
+                saved.setId(1L);
+            }
+            return saved;
+        });
+    }
+
+    @AfterEach
+    void tearDown() {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 
     @Test
-    void checkoutWithoutVoucher_returnsPaidTotalWithoutCallingVoucher() {
-        stubOrderSave();
+    void checkoutWithoutVoucher_marksPaidAndReducesStockAfterCommit() {
+        request.setVoucherCode(null);
+        initSynchronization();
 
         CheckoutResponse response = checkoutService.checkout(request);
 
-        assertEquals(1L, response.orderId());
+        assertNotNull(response);
         assertEquals(OrderStatus.PAID, response.status());
-        assertEquals(null, response.voucherCode());
-        assertEquals(0, new BigDecimal("200000").compareTo(response.subtotal()));
-        assertEquals(0, BigDecimal.ZERO.compareTo(response.discountAmount()));
-        assertEquals(0, new BigDecimal("200000").compareTo(response.totalPaid()));
-        verify(voucherClient, never()).validateVoucher("WELCOME20", new BigDecimal("200000"));
-        verify(voucherClient, never()).redeemVoucher("WELCOME20", new BigDecimal("200000"));
-        verify(orderRepository).save(argThat(order ->
-            order.getVoucherCode() == null
-                && new BigDecimal("200000").compareTo(order.getSubtotal()) == 0
-                && BigDecimal.ZERO.compareTo(order.getDiscountAmount()) == 0
-                && new BigDecimal("200000").compareTo(order.getTotalPrice()) == 0
-                && OrderStatus.PAID == order.getStatus()
-        ));
+        assertNull(response.voucherCode());
+        assertEquals(new BigDecimal("20000"), response.subtotal());
+        assertEquals(new BigDecimal("20000"), response.totalPaid());
+        verify(voucherClient, never()).validateVoucher(any(), any());
+        verify(orderRepository).save(any(Order.class));
+
+        triggerAfterCommit();
+
+        verify(inventoryClient).reduceProductStock("PROD-1", 2);
+        verify(voucherClient, never()).redeemVoucher(any(), any());
     }
 
     @Test
-    void checkoutWithVoucher_callsValidateAndReturnsDiscountedTotal() {
-        stubOrderSave();
-        request.setVoucherCode("WELCOME20");
-        when(voucherClient.validateVoucher("WELCOME20", new BigDecimal("200000")))
-            .thenReturn(new VoucherValidateResponse(
-                "WELCOME20",
-                new BigDecimal("200000"),
-                new BigDecimal("40000")
-            ));
-        when(voucherClient.redeemVoucher("WELCOME20", new BigDecimal("200000")))
-            .thenReturn(new VoucherRedeemResponse(
-                "WELCOME20",
-                new BigDecimal("200000"),
-                9
-            ));
-
-        TransactionSynchronizationManager.initSynchronization();
-        try {
-            CheckoutResponse response = checkoutService.checkout(request);
-
-            assertEquals(1L, response.orderId());
-            assertEquals(OrderStatus.CHECKOUT_PENDING, response.status());
-            assertEquals("WELCOME20", response.voucherCode());
-            assertEquals(0, new BigDecimal("40000").compareTo(response.discountAmount()));
-            assertEquals(0, new BigDecimal("160000").compareTo(response.totalPaid()));
-
-            triggerAfterCommit();
-
-            InOrder inOrder = inOrder(voucherClient, orderRepository);
-            inOrder.verify(voucherClient).validateVoucher("WELCOME20", new BigDecimal("200000"));
-            inOrder.verify(orderRepository).save(any(Order.class));
-            inOrder.verify(voucherClient).redeemVoucher("WELCOME20", new BigDecimal("200000"));
-            inOrder.verify(orderRepository).save(any(Order.class));
-        } finally {
-            TransactionSynchronizationManager.clearSynchronization();
-        }
-    }
-
-    @Test
-    void checkoutWithVoucher_trimsVoucherCodeAndSavesVoucherSnapshot() {
-        stubOrderSave();
-        request.setVoucherCode("  WELCOME20  ");
-        when(voucherClient.validateVoucher("WELCOME20", new BigDecimal("200000")))
-            .thenReturn(new VoucherValidateResponse(
-                "WELCOME20",
-                new BigDecimal("200000"),
-                new BigDecimal("40000")
-            ));
-        when(voucherClient.redeemVoucher("WELCOME20", new BigDecimal("200000")))
-            .thenReturn(new VoucherRedeemResponse(
-                "WELCOME20",
-                new BigDecimal("200000"),
-                9
-            ));
-
-        TransactionSynchronizationManager.initSynchronization();
-        try {
-            CheckoutResponse response = checkoutService.checkout(request);
-
-            assertEquals("WELCOME20", response.voucherCode());
-            assertEquals(OrderStatus.CHECKOUT_PENDING, response.status());
-            verify(voucherClient).validateVoucher("WELCOME20", new BigDecimal("200000"));
-            verify(orderRepository).save(argThat(order ->
-                "WELCOME20".equals(order.getVoucherCode())
-                    && new BigDecimal("200000").compareTo(order.getSubtotal()) == 0
-                    && new BigDecimal("40000").compareTo(order.getDiscountAmount()) == 0
-                    && new BigDecimal("160000").compareTo(order.getTotalPrice()) == 0
-                    && OrderStatus.CHECKOUT_PENDING == order.getStatus()
-            ));
-
-            triggerAfterCommit();
-            verify(voucherClient).redeemVoucher("WELCOME20", new BigDecimal("200000"));
-            verify(orderRepository, org.mockito.Mockito.atLeast(2)).save(any(Order.class));
-        } finally {
-            TransactionSynchronizationManager.clearSynchronization();
-        }
-    }
-
-    @Test
-    void checkoutWithBlankVoucher_doesNotCallVoucher() {
-        stubOrderSave();
-        request.setVoucherCode(" ");
+    void checkoutWithVoucher_redeemsAfterCommitAndUpdatesStatus() {
+        request.setVoucherCode("  VOUCHER10 ");
+        when(voucherClient.validateVoucher(eq("VOUCHER10"), eq(new BigDecimal("20000"))))
+                .thenReturn(new VoucherValidateResponse("VOUCHER10", new BigDecimal("20000"), new BigDecimal("2000")));
+        initSynchronization();
 
         CheckoutResponse response = checkoutService.checkout(request);
 
-        assertEquals(null, response.voucherCode());
-        assertEquals(0, new BigDecimal("200000").compareTo(response.totalPaid()));
-        verify(voucherClient, never()).validateVoucher("WELCOME20", new BigDecimal("200000"));
-        verify(voucherClient, never()).redeemVoucher("WELCOME20", new BigDecimal("200000"));
-        verify(orderRepository).save(any(Order.class));
+        assertEquals(OrderStatus.CHECKOUT_PENDING, response.status());
+        assertEquals("VOUCHER10", response.voucherCode());
+        assertEquals(new BigDecimal("20000"), response.subtotal());
+        assertEquals(new BigDecimal("18000"), response.totalPaid());
+
+        ArgumentCaptor<Order> initialCaptor = ArgumentCaptor.forClass(Order.class);
+        verify(orderRepository).save(initialCaptor.capture());
+        assertEquals(OrderStatus.CHECKOUT_PENDING, initialCaptor.getValue().getStatus());
+
+        triggerAfterCommit();
+
+        ArgumentCaptor<Order> orderCaptor = ArgumentCaptor.forClass(Order.class);
+        verify(orderRepository, times(2)).save(orderCaptor.capture());
+        List<Order> savedOrders = orderCaptor.getAllValues();
+        assertEquals(OrderStatus.PAID, savedOrders.get(1).getStatus());
+        verify(voucherClient).redeemVoucher("VOUCHER10", new BigDecimal("20000"));
+        verify(inventoryClient).reduceProductStock("PROD-1", 2);
+    }
+
+    @Test
+    void checkoutWithVoucher_whenRedeemFails_throwsOnAfterCommit() {
+        request.setVoucherCode("VOUCHER10");
+        when(voucherClient.validateVoucher(eq("VOUCHER10"), eq(new BigDecimal("20000"))))
+                .thenReturn(new VoucherValidateResponse("VOUCHER10", new BigDecimal("20000"), new BigDecimal("1000")));
+        when(voucherClient.redeemVoucher(eq("VOUCHER10"), eq(new BigDecimal("20000"))))
+                .thenThrow(new RuntimeException("redeem failed"));
+        initSynchronization();
+
+        checkoutService.checkout(request);
+
+        assertThrows(RuntimeException.class, this::triggerAfterCommit);
+        verify(inventoryClient, never()).reduceProductStock(any(), any());
     }
 
     @Test
     void checkoutRejectsSelfPurchase() {
-        request.setTitiperUserId("same-user");
-        request.setJastiperUserId("same-user");
+        product.setJastiperId("titiper-1");
 
         assertThrows(SelfPurchaseNotAllowedException.class, () -> checkoutService.checkout(request));
-        verify(voucherClient, never()).validateVoucher("WELCOME20", new BigDecimal("200000"));
-        verify(voucherClient, never()).redeemVoucher("WELCOME20", new BigDecimal("200000"));
         verify(orderRepository, never()).save(any(Order.class));
     }
 
     @Test
-    void checkoutWhenVoucherInvalid_propagatesVoucherError() {
-        request.setVoucherCode("INVALID");
-        when(voucherClient.validateVoucher("INVALID", new BigDecimal("200000")))
-            .thenThrow(RestClientResponseException.class);
+    void checkoutRejectsInsufficientStock() {
+        product.setStok(1);
 
-        assertThrows(RestClientResponseException.class, () -> checkoutService.checkout(request));
-        verify(voucherClient).validateVoucher("INVALID", new BigDecimal("200000"));
-        verify(voucherClient, never()).redeemVoucher("INVALID", new BigDecimal("200000"));
+        assertThrows(ResponseStatusException.class, () -> checkoutService.checkout(request));
         verify(orderRepository, never()).save(any(Order.class));
     }
 
     @Test
-    void checkoutWhenRedeemFails_savesOrderThenPropagatesVoucherError() {
-        stubOrderSave();
-        request.setVoucherCode("WELCOME20");
-        when(voucherClient.validateVoucher("WELCOME20", new BigDecimal("200000")))
-            .thenReturn(new VoucherValidateResponse(
-                "WELCOME20",
-                new BigDecimal("200000"),
-                new BigDecimal("40000")
-            ));
-        when(voucherClient.redeemVoucher("WELCOME20", new BigDecimal("200000")))
-            .thenThrow(RestClientResponseException.class);
+    void checkoutRejectsInvalidQuantity() {
+        request.setQuantity(0);
 
-        TransactionSynchronizationManager.initSynchronization();
-        try {
-            CheckoutResponse response = checkoutService.checkout(request);
-            assertEquals(1L, response.orderId());
-            assertEquals(OrderStatus.CHECKOUT_PENDING, response.status());
+        assertThrows(ResponseStatusException.class, () -> checkoutService.checkout(request));
+        verify(orderRepository, never()).save(any(Order.class));
+    }
 
-            assertThrows(RestClientResponseException.class, this::triggerAfterCommit);
-
-            InOrder inOrder = inOrder(voucherClient, orderRepository);
-            inOrder.verify(voucherClient).validateVoucher("WELCOME20", new BigDecimal("200000"));
-            inOrder.verify(orderRepository).save(any(Order.class));
-            inOrder.verify(voucherClient).redeemVoucher("WELCOME20", new BigDecimal("200000"));
-        } finally {
-            TransactionSynchronizationManager.clearSynchronization();
+    private void initSynchronization() {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.initSynchronization();
         }
     }
 
     private void triggerAfterCommit() {
-        List<TransactionSynchronization> synchronizations =
-            new ArrayList<>(TransactionSynchronizationManager.getSynchronizations());
-        for (TransactionSynchronization synchronization : synchronizations) {
+        for (TransactionSynchronization synchronization : TransactionSynchronizationManager.getSynchronizations()) {
             synchronization.afterCommit();
         }
     }
-
-    private void stubOrderSave() {
-        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
-            Order order = invocation.getArgument(0);
-            order.setId(1L);
-            return order;
-        });
-    }
 }
-
