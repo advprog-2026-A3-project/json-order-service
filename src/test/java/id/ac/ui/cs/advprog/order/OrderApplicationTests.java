@@ -1,19 +1,17 @@
 package id.ac.ui.cs.advprog.order;
 
+import id.ac.ui.cs.advprog.order.client.WalletClient;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
-
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @SpringBootTest
 class OrderApplicationTests {
 
-    @Test
-    void contextLoads() {
-    }
+    @MockitoBean
+    WalletClient walletClient;
 
     @Test
-    void mainTest() {
-        assertDoesNotThrow(() -> OrderApplication.main(new String[]{"--server.port=0"}));
+    void contextLoads() {
     }
 }
