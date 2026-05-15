@@ -1,5 +1,7 @@
 package id.ac.ui.cs.advprog.order.exception;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
@@ -10,6 +12,8 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClientResponseException;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -22,6 +26,7 @@ import java.util.Map;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @ExceptionHandler(OrderNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleOrderNotFound(OrderNotFoundException ex) {
@@ -78,9 +83,31 @@ public class GlobalExceptionHandler {
                 ));
     }
 
+    @ExceptionHandler(SelfPurchaseNotAllowedException.class)
+    public ResponseEntity<ErrorResponse> handleSelfPurchaseNotAllowed(SelfPurchaseNotAllowedException ex) {
+        log.warn("Self purchase rejected during checkout: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(new ErrorResponse(
+                        HttpStatus.FORBIDDEN.value(),
+                        ex.getMessage(),
+                        LocalDateTime.now()
+                ));
+    }
+
     @ExceptionHandler(OrderException.class)
     public ResponseEntity<ErrorResponse> handleOrderException(OrderException ex) {
         log.error("Order exception: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorResponse(
+                        HttpStatus.BAD_REQUEST.value(),
+                        ex.getMessage(),
+                        LocalDateTime.now()
+                ));
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ErrorResponse> handleIllegalArgumentException(IllegalArgumentException ex) {
+        log.warn("Invalid request argument: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ErrorResponse(
                         HttpStatus.BAD_REQUEST.value(),
@@ -109,8 +136,36 @@ public class GlobalExceptionHandler {
                 ));
     }
 
+    @ExceptionHandler(RestClientResponseException.class)
+    public ResponseEntity<ErrorResponse> handleRestClientResponseException(RestClientResponseException ex) {
+        String downstreamMessage = extractDownstreamMessage(ex);
+        log.warn("Downstream service returned {}: {}", ex.getStatusCode(), downstreamMessage);
+        return ResponseEntity.status(ex.getStatusCode())
+                .body(new ErrorResponse(
+                        ex.getStatusCode().value(),
+                        downstreamMessage,
+                        LocalDateTime.now()
+                ));
+    }
+
+    @ExceptionHandler(ResourceAccessException.class)
+    public ResponseEntity<ErrorResponse> handleResourceAccessException(ResourceAccessException ex) {
+        log.warn("Downstream service is unavailable: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(new ErrorResponse(
+                        HttpStatus.SERVICE_UNAVAILABLE.value(),
+                        "Downstream service unavailable",
+                        LocalDateTime.now()
+                ));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericException(Exception ex) {
+        SelfPurchaseNotAllowedException selfPurchaseCause = findCause(ex, SelfPurchaseNotAllowedException.class);
+        if (selfPurchaseCause != null) {
+            return handleSelfPurchaseNotAllowed(selfPurchaseCause);
+        }
+
         log.error("Unexpected error: ", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(new ErrorResponse(
@@ -118,6 +173,69 @@ public class GlobalExceptionHandler {
                         "An unexpected error occurred",
                         LocalDateTime.now()
                 ));
+    }
+
+    @ExceptionHandler(InvalidOrderStatusTransitionException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidOrderStatusTransition(InvalidOrderStatusTransitionException ex) {
+        log.warn("Invalid order status transition: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorResponse(
+                        HttpStatus.BAD_REQUEST.value(),
+                        ex.getMessage(),
+                        LocalDateTime.now()
+                ));
+    }
+
+    @ExceptionHandler(RatingAlreadyExistsException.class)
+    public ResponseEntity<ErrorResponse> handleRatingAlreadyExists(RatingAlreadyExistsException ex) {
+        log.warn("Rating already exists: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ErrorResponse(
+                        HttpStatus.CONFLICT.value(),
+                        ex.getMessage(),
+                        LocalDateTime.now()
+                ));
+    }
+
+    @ExceptionHandler(RatingNotAllowedException.class)
+    public ResponseEntity<ErrorResponse> handleRatingNotAllowed(RatingNotAllowedException ex) {
+        log.warn("Rating not allowed: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorResponse(
+                        HttpStatus.BAD_REQUEST.value(),
+                        ex.getMessage(),
+                        LocalDateTime.now()
+                ));
+    }
+
+    private String extractDownstreamMessage(RestClientResponseException ex) {
+        String responseBody = ex.getResponseBodyAsString();
+        if (responseBody == null || responseBody.isBlank()) {
+            return ex.getMessage();
+        }
+
+        try {
+            JsonNode root = OBJECT_MAPPER.readTree(responseBody);
+            JsonNode messageNode = root.get("message");
+            if (messageNode != null && !messageNode.isNull() && !messageNode.asText().isBlank()) {
+                return messageNode.asText();
+            }
+        } catch (Exception parseException) {
+            log.debug("Failed to parse downstream error body: {}", responseBody, parseException);
+        }
+
+        return responseBody;
+    }
+
+    private <T extends Throwable> T findCause(Throwable throwable, Class<T> type) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (type.isInstance(current)) {
+                return type.cast(current);
+            }
+            current = current.getCause();
+        }
+        return null;
     }
 
     @Getter

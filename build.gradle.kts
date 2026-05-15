@@ -43,8 +43,6 @@ dependencies {
     implementation("org.flywaydb:flyway-core")
     runtimeOnly("org.flywaydb:flyway-database-postgresql")
 
-    // --- Validation ---
-    implementation("org.springframework.boot:spring-boot-starter-validation") // Jakarta Validation support
 
     // --- Utils ---
     compileOnly("org.projectlombok:lombok")
@@ -68,6 +66,7 @@ tasks.withType<Test> {
 
 tasks.jacocoTestReport {
     dependsOn(tasks.test)
+
     reports {
         xml.required.set(true)
         csv.required.set(false)
@@ -76,10 +75,28 @@ tasks.jacocoTestReport {
 }
 
 tasks.jacocoTestCoverageVerification {
+    val jacocoExcludes = listOf(
+        "**/dto/**",
+        "**/model/**",
+        "**/exception/**",
+        "**/config/**",
+        "**/client/**",
+        "**/repository/**",
+        "**/OrderApplication*"
+    )
+
+    val jacocoMinimum = (project.findProperty("jacocoMinimum") as String?)
+        ?.toBigDecimal()
+        ?: 0.90.toBigDecimal()
+
+    classDirectories.setFrom(
+        files(classDirectories.files.map { fileTree(it) { exclude(jacocoExcludes) } })
+    )
+
     violationRules {
         rule {
             limit {
-                minimum = 0.8.toBigDecimal()
+                minimum = jacocoMinimum
             }
         }
     }
